@@ -75,7 +75,7 @@ Returns: { result, provider, remainingQuota }  | { error, code }
 ### Folder structure
 
 ```
-twtr-translater/
+twtr-translator/
 ├── extension/                 ← Chrome extension (WXT framework)
 │   ├── wxt.config.ts
 │   ├── package.json

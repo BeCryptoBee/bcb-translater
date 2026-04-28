@@ -1,14 +1,14 @@
-# bcb-translater Implementation Plan
+# bcb-translator Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a Chrome MV3 extension (`bcb-translater`) that translates and summarizes web text — with structure preservation — using Gemini and Groq, plus a Cloudflare Worker proxy with daily quota for users without their own API key.
+**Goal:** Build a Chrome MV3 extension (`bcb-translator`) that translates and summarizes web text — with structure preservation — using Gemini and Groq, plus a Cloudflare Worker proxy with daily quota for users without their own API key.
 
 **Architecture:** pnpm workspace with two packages: `extension/` (WXT + React 19 + Tailwind v4 + TypeScript strict) and `worker/` (Cloudflare Worker + KV + Wrangler). Content script never calls LLMs directly — all calls go through the background service worker, which decides between own-key direct calls or the Cloudflare Worker proxy. Provider fallback (Gemini → Groq) lives in a shared helper duplicated across both runtimes.
 
 **Tech Stack:** WXT, React 19, TypeScript strict, Tailwind CSS v4, franc-min, Cloudflare Workers + KV, Wrangler, pnpm, Vitest (unit tests), Miniflare (Worker tests).
 
-**Reference:** [`docs/superpowers/specs/2026-04-28-twtr-translater-design.md`](../specs/2026-04-28-twtr-translater-design.md)
+**Reference:** [`docs/superpowers/specs/2026-04-28-twtr-translator-design.md`](../specs/2026-04-28-twtr-translator-design.md)
 
 ---
 
@@ -25,7 +25,7 @@
 ## File structure (target)
 
 ```
-bcb-translater/
+bcb-translator/
 ├── package.json                      ← pnpm workspace root
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
@@ -126,7 +126,7 @@ bcb-translater/
 
 ```json
 {
-  "name": "bcb-translater",
+  "name": "bcb-translator",
   "private": true,
   "version": "0.0.1",
   "packageManager": "pnpm@9.12.0",
@@ -277,7 +277,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    name: 'bcb-translater',
+    name: 'bcb-translator',
     description: 'Fast LLM translation and summarization with structure preservation',
     permissions: ['storage', 'contextMenus', 'activeTab'],
     host_permissions: ['<all_urls>'],
@@ -291,7 +291,7 @@ export default defineConfig({
         description: 'Summarize selected text'
       }
     },
-    action: { default_popup: 'popup.html', default_title: 'bcb-translater' }
+    action: { default_popup: 'popup.html', default_title: 'bcb-translator' }
   }
 });
 ```
@@ -316,7 +316,7 @@ export default defineContentScript({
 });
 ```
 
-Popup and options HTML+main.tsx render a simple `<div>bcb-translater</div>` for now. We'll fill these in later phases.
+Popup and options HTML+main.tsx render a simple `<div>bcb-translator</div>` for now. We'll fill these in later phases.
 
 - [ ] **Step 5: Generate placeholder PNG icons**
 
@@ -349,7 +349,7 @@ module.exports = { plugins: { '@tailwindcss/postcss': {} } };
 cd extension && pnpm dev
 ```
 
-Expected: WXT prints `Built extension in <ms>` and opens Chrome with the unpacked extension loaded. In `chrome://extensions` the extension `bcb-translater` is enabled. Console of any page shows `[bcb] content script loaded`. Service-worker console shows `[bcb] background ready`.
+Expected: WXT prints `Built extension in <ms>` and opens Chrome with the unpacked extension loaded. In `chrome://extensions` the extension `bcb-translator` is enabled. Console of any page shows `[bcb] content script loaded`. Service-worker console shows `[bcb] background ready`.
 
 - [ ] **Step 8: Commit**
 
@@ -407,7 +407,7 @@ git commit -m "feat(extension): scaffold WXT + React 19 + Tailwind v4 with stub 
 - [ ] **Step 3: Create `worker/wrangler.toml`**
 
 ```toml
-name = "bcb-translater"
+name = "bcb-translator"
 main = "src/index.ts"
 compatibility_date = "2026-04-28"
 
@@ -1380,7 +1380,7 @@ git commit -m "feat(extension): add Shadow DOM mount helper for in-page React"
 ```tsx
 export function FloatingButton({ onClick }: { onClick: () => void }) {
   return (
-    <button className="bcb-floating" onClick={onClick} aria-label="bcb-translater action">
+    <button className="bcb-floating" onClick={onClick} aria-label="bcb-translator action">
       🌐
     </button>
   );
@@ -1578,7 +1578,7 @@ export function App() {
   return (
     <div className={dark ? 'dark' : ''}>
       <div className="w-[360px] p-4 bg-white dark:bg-zinc-900 dark:text-zinc-100 space-y-3">
-        <h1 className="text-lg font-semibold">bcb-translater</h1>
+        <h1 className="text-lg font-semibold">bcb-translator</h1>
 
         <label className="block">
           <span className="text-sm">Target language</span>
@@ -1910,14 +1910,14 @@ User pastes each key when prompted.
 pnpm deploy
 ```
 
-Expected output: `Published bcb-translater (X.YZ sec)` and a public URL like `https://bcb-translater.<subdomain>.workers.dev`.
+Expected output: `Published bcb-translator (X.YZ sec)` and a public URL like `https://bcb-translator.<subdomain>.workers.dev`.
 
 - [ ] **Step 4: Update `extension/lib/providers/proxy.ts`** with the deployed URL.
 
 - [ ] **Step 5: Smoke test**
 
 ```bash
-curl -X POST https://bcb-translater.<subdomain>.workers.dev/v1/process \
+curl -X POST https://bcb-translator.<subdomain>.workers.dev/v1/process \
   -H 'content-type: application/json' \
   -H 'x-install-id: test-curl-id' \
   -d '{"mode":"translate","text":"Hello world","targetLang":"Ukrainian"}'

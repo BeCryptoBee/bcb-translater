@@ -122,15 +122,31 @@ export default defineContentScript({
       return { x, y: rect.bottom + window.scrollY + 8 };
     };
 
-    const showPopup = (text: string, rect: DOMRect, defaultMode?: Mode) => {
+    // Always-visible position: top-center of the current viewport. Used when
+    // we're invoked via context menu / hotkey, where we have no reliable
+    // selection rect (some sites clear the selection on right-click) and
+    // computing from a wrong rect can put the popup off-screen.
+    const viewportCenterPosition = (): { x: number; y: number } => {
+      const x = window.scrollX + Math.max(8, (window.innerWidth - POPUP_W) / 2);
+      const y = window.scrollY + 60;
+      return { x, y };
+    };
+
+    const showPopup = (
+      text: string,
+      anchor: DOMRect | { x: number; y: number },
+      defaultMode?: Mode,
+    ) => {
       closeMount();
+      const pos =
+        anchor instanceof DOMRect ? computePopupPosition(anchor) : anchor;
       const next: ShadowMount = mountShadow(
         <ActionPopup
           text={text}
           defaultMode={defaultMode}
           onClose={() => closeMount()}
         />,
-        computePopupPosition(rect),
+        pos,
       );
       mount = next;
       attachDismiss(next);
@@ -158,13 +174,12 @@ export default defineContentScript({
       const text = m.text ?? sel?.toString() ?? '';
       if (!text) return;
 
-      // showPopup adds scrollX/scrollY, so this rect must be in viewport coords.
-      const viewportRect =
-        sel && sel.rangeCount > 0 && !sel.isCollapsed
-          ? sel.getRangeAt(0).getBoundingClientRect()
-          : new DOMRect(window.innerWidth / 2 - 100, window.innerHeight / 2, 200, 30);
-
-      showPopup(text, viewportRect, m.mode);
+      // For context menu / hotkey invocations, ignore the selection rect
+      // entirely and place the popup at the top-center of the current
+      // viewport. Some sites clear the selection on right-click (so the rect
+      // is gone), and even when it's there it can be off-screen if the user
+      // scrolled — both cases used to drop the popup somewhere invisible.
+      showPopup(text, viewportCenterPosition(), m.mode);
     });
 
     // X.com / twitter.com: inject inline "Translate / Summary" button

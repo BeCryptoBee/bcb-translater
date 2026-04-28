@@ -3,7 +3,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    name: 'bcb-translater',
+    name: 'BCB Translator',
     description: 'Fast LLM translation and summarization with structure preservation',
     permissions: ['storage', 'contextMenus', 'activeTab'],
     host_permissions: ['<all_urls>'],
@@ -17,6 +17,6 @@ export default defineConfig({
         description: 'Summarize selected text',
       },
     },
-    action: { default_popup: 'popup.html', default_title: 'bcb-translater' },
+    action: { default_popup: 'popup.html', default_title: 'BCB Translator' },
   },
 });

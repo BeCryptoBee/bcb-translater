@@ -16,22 +16,38 @@ export default defineBackground(() => {
     return true; // keep channel open for async response
   });
 
-  chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create({
-      id: 'bcb-translate',
-      title: 'Translate selection',
-      contexts: ['selection'],
+  // (Re-)create context menus on install / update / browser start. Removing
+  // first avoids the "Cannot create item with duplicate id" error when the
+  // service worker restarts after a manual refresh.
+  const buildMenus = (): void => {
+    chrome.contextMenus.removeAll(() => {
+      chrome.contextMenus.create({
+        id: 'bcb-root',
+        title: 'BCB Translate',
+        contexts: ['selection'],
+      });
+      chrome.contextMenus.create({
+        id: 'bcb-translate',
+        parentId: 'bcb-root',
+        title: 'Translate selection',
+        contexts: ['selection'],
+      });
+      chrome.contextMenus.create({
+        id: 'bcb-summarize',
+        parentId: 'bcb-root',
+        title: 'Summary selection',
+        contexts: ['selection'],
+      });
     });
-    chrome.contextMenus.create({
-      id: 'bcb-summarize',
-      title: 'Summarize selection',
-      contexts: ['selection'],
-    });
-  });
+  };
+  chrome.runtime.onInstalled.addListener(buildMenus);
+  chrome.runtime.onStartup.addListener(buildMenus);
 
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (!tab?.id || !info.selectionText) return;
-    const mode = String(info.menuItemId) === 'bcb-translate' ? 'translate' : 'summarize';
+    const id = String(info.menuItemId);
+    if (id !== 'bcb-translate' && id !== 'bcb-summarize') return;
+    const mode = id === 'bcb-translate' ? 'translate' : 'summarize';
     chrome.tabs.sendMessage(tab.id, {
       type: 'trigger-action',
       mode,

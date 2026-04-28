@@ -13,7 +13,7 @@ export function FloatingButton({ onTranslate, onSummary, color }: Props) {
     <div
       className="bcb-floating-bar"
       role="group"
-      aria-label="bcb-translater actions"
+      aria-label="BCB Translator actions"
       style={style}
     >
       <button

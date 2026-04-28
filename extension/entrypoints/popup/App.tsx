@@ -73,7 +73,7 @@ export function App() {
   return (
     <div className={dark ? 'dark' : ''}>
       <div className="w-[360px] p-4 bg-white dark:bg-zinc-900 dark:text-zinc-100 space-y-3">
-        <h1 className="text-lg font-semibold">bcb-translater</h1>
+        <h1 className="text-lg font-semibold">BCB Translator</h1>
 
         <label className="block">
           <span className="text-sm">Target language</span>
