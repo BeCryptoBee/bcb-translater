@@ -3,6 +3,7 @@ import { FloatingButton } from '~/components/FloatingButton';
 import { mountShadow, type ShadowMount } from '~/lib/shadow-host';
 import { watchSelection } from '~/lib/selection-watcher';
 import { startTweetInjector } from '~/lib/twitter/injector';
+import { getSettings, onSettingsChange } from '~/lib/storage';
 import type { Mode } from '~/lib/messages';
 
 export default defineContentScript({
@@ -66,23 +67,19 @@ export default defineContentScript({
       document.addEventListener('keydown', keydownHandler, true);
     };
 
-    // Read the rendered text color of the element that holds the current
-    // selection. Falling back to null lets the shadow.css default kick in.
-    const selectionTextColor = (): string | null => {
-      const sel = document.getSelection();
-      if (!sel || !sel.anchorNode) return null;
-      const node = sel.anchorNode;
-      const parent =
-        node.nodeType === Node.ELEMENT_NODE
-          ? (node as Element)
-          : node.parentElement;
-      if (!parent) return null;
-      try {
-        return getComputedStyle(parent).color || null;
-      } catch {
-        return null;
-      }
-    };
+    // The selection floating bar shares the user's chosen accent color with
+    // the inline tweet button (single setting, used in two places). Cache
+    // the latest value so showButton stays synchronous; refresh when the
+    // user updates settings.
+    let accentColor = '#9ca3af';
+    void getSettings().then((s) => {
+      accentColor = s.tweetButtonColor;
+    });
+    const unsubAccent = onSettingsChange((s) => {
+      accentColor = s.tweetButtonColor;
+    });
+    // Detach on hot-reload of the content script (defensive).
+    window.addEventListener('beforeunload', () => unsubAccent(), { once: true });
 
     const showButton = (text: string, rect: DOMRect) => {
       closeMount();
@@ -92,12 +89,11 @@ export default defineContentScript({
       const maxX = window.scrollX + window.innerWidth - FLOAT_W - FLOAT_GUTTER;
       const x = Math.max(0, Math.min(rawX, maxX));
       const y = Math.max(0, rect.top + window.scrollY);
-      const color = selectionTextColor();
       const next = mountShadow(
         <FloatingButton
           onTranslate={() => showPopup(text, rect, 'translate')}
           onSummary={() => showPopup(text, rect, 'summarize')}
-          color={color}
+          color={accentColor}
         />,
         { x, y },
       );

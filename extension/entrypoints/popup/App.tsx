@@ -130,7 +130,7 @@ export function App() {
         </label>
 
         <label className="block">
-          <span className="text-sm">Tweet button color</span>
+          <span className="text-sm">Accent color (tweet & selection buttons)</span>
           <div className="flex gap-2 mt-1">
             <input
               type="color"
