@@ -3,6 +3,8 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { ResultView } from './ResultView';
 import type { Mode, ProcessRequest, ProcessResponse } from '~/lib/messages';
 import { getSettings } from '~/lib/storage';
+import { detectLanguage } from '~/lib/lang-detect';
+import { normalizeLang } from '~/lib/prompts';
 
 type State =
   | { phase: 'choose' }
@@ -19,11 +21,28 @@ export function ActionPopup({ text, onClose, defaultMode }: Props) {
   const [state, setState] = useState<State>(
     defaultMode ? { phase: 'loading', mode: defaultMode } : { phase: 'choose' },
   );
+  const [targetLang, setTargetLang] = useState<string>('uk');
   const headerRef = useRef<HTMLDivElement>(null);
+
+  // Detect source language once from the text we were given. franc-min is
+  // synchronous and fast, so we keep it inline rather than in an effect.
+  const sourceLangCode = detectLanguage(text);
+  const sourceLangName =
+    sourceLangCode === 'und' ? '?' : normalizeLang(sourceLangCode);
+  const targetLangName = normalizeLang(targetLang);
+
+  let headerLabel = '';
+  if (state.phase !== 'choose') {
+    headerLabel =
+      state.mode === 'translate'
+        ? `Translate · ${sourceLangName} → ${targetLangName}`
+        : `Summary · ${targetLangName}`;
+  }
 
   const run = async (mode: Mode) => {
     setState({ phase: 'loading', mode });
     const settings = await getSettings();
+    setTargetLang(settings.targetLang);
     const request: ProcessRequest = {
       type: 'process',
       mode,
@@ -37,6 +56,7 @@ export function ActionPopup({ text, onClose, defaultMode }: Props) {
   // Auto-run once on mount when a defaultMode was supplied (e.g. context menu / hotkey).
   useEffect(() => {
     if (defaultMode) void run(defaultMode);
+    else void getSettings().then((s) => setTargetLang(s.targetLang));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -80,6 +100,7 @@ export function ActionPopup({ text, onClose, defaultMode }: Props) {
         onPointerDown={onHeaderPointerDown}
       >
         <span className="bcb-drag-grip" aria-hidden="true">⋮⋮</span>
+        <span className="bcb-header-label">{headerLabel}</span>
         <button
           type="button"
           className="bcb-close"

@@ -60,7 +60,15 @@ async function runScan(onClick: OnClick): Promise<void> {
     if (t.hasAttribute(FLAG)) continue;
     t.setAttribute(FLAG, '1');
 
-    const text = t.innerText.trim();
+    // Twitter renders verified badges, inline media and tightly-styled
+    // @mentions as inline-block elements. innerText then inserts spurious
+    // newlines around them — e.g. "AAVE on @Solana, more volume…" becomes
+    // "AAVE on\n@Solana\n, more volume…". Collapse isolated single \n to
+    // a space; keep \n\n (real paragraph breaks) intact.
+    const raw = t.innerText.trim();
+    const text = raw
+      .replace(/(?<!\n)\n(?!\n)/g, ' ')
+      .replace(/[ \t]+/g, ' ');
     if (text.length < 5) continue;
 
     const lang = detectLanguage(text);

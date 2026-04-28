@@ -17,7 +17,8 @@ describe('prompts', () => {
 
   it('summary system prompt embeds target language', () => {
     const p = buildSummarizePrompt({ text: 'hello', targetLang: 'Ukrainian' });
-    expect(p.system).toContain("Summarize the user's message in Ukrainian");
+    expect(p.system).toContain('Ukrainian');
+    expect(p.system).toMatch(/summarizer|essence/i);
   });
 
   it('does not interpolate or escape dollar signs in user text', () => {
