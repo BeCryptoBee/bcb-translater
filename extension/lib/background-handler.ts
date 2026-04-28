@@ -99,11 +99,21 @@ export async function handleProcess(
     return { ok: true, result, provider, remainingQuota };
   } catch (e: unknown) {
     const kind = (e as { kind?: string })?.kind;
+    const usingOwnKey = !!settings.userApiKey;
+    if (kind === 'auth') {
+      return {
+        ok: false,
+        code: 'invalid_input',
+        message: 'API key was rejected — check it in settings.',
+      };
+    }
     if (kind === 'rate_limit') {
       return {
         ok: false,
         code: 'quota_exhausted',
-        message: 'Free quota exhausted — please add your own API key in settings',
+        message: usingOwnKey
+          ? 'Provider rate limit hit (free-tier limits are short — try again in a minute, or paste a Groq key for higher throughput).'
+          : 'Free quota exhausted — please add your own API key in settings.',
       };
     }
     if (kind === 'network') {
