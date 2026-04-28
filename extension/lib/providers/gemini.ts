@@ -8,7 +8,7 @@ export const gemini: Provider = {
   async call(input: ProviderInput, fetchImpl: typeof fetch = fetch): Promise<ProviderResult> {
     let res: Response;
     try {
-      res = await fetchImpl(buildUrl('gemini-2.0-flash', input.apiKey), {
+      res = await fetchImpl(buildUrl('gemini-2.5-flash', input.apiKey), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -16,6 +16,7 @@ export const gemini: Provider = {
           generationConfig: {
             temperature: input.temperature,
             responseMimeType: 'text/plain',
+            thinkingConfig: { thinkingBudget: 0 },
           },
         }),
       });
