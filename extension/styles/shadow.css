@@ -13,38 +13,32 @@ button {
 }
 
 /* Selection floating bar — two pill buttons side by side. Clicking either
-   one runs the action immediately (no intermediate "choose" popup). */
+   one runs the action immediately (no intermediate "choose" popup).
+   The bar has no background of its own; the pill buttons use currentColor
+   for their border so the bar inherits the page text color set inline by
+   content.tsx and visually blends with the surrounding typography. */
 .bcb-floating-bar {
   display: inline-flex;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid #ddd;
-  background: white;
-  border-radius: 9px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  gap: 6px;
+  color: #333;
 }
 .bcb-floating-btn {
-  padding: 3px 10px;
-  border: none;
+  padding: 2px 10px;
+  border: 1px solid currentColor;
+  border-radius: 9999px;
   background: transparent;
-  border-radius: 6px;
   font-size: 12px;
   line-height: 18px;
-  color: #333;
+  color: inherit;
   cursor: pointer;
+  opacity: 0.85;
 }
 .bcb-floating-btn:hover {
-  background: #f0f0f0;
+  opacity: 1;
 }
+/* Dark fallback if no inline color was provided (rare). */
 :host([data-theme='dark']) .bcb-floating-bar {
-  background: #1f1f1f;
-  border-color: #333;
-}
-:host([data-theme='dark']) .bcb-floating-btn {
   color: #eee;
-}
-:host([data-theme='dark']) .bcb-floating-btn:hover {
-  background: #2a2a2a;
 }
 
 .bcb-popup {

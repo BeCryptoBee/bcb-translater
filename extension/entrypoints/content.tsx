@@ -66,6 +66,24 @@ export default defineContentScript({
       document.addEventListener('keydown', keydownHandler, true);
     };
 
+    // Read the rendered text color of the element that holds the current
+    // selection. Falling back to null lets the shadow.css default kick in.
+    const selectionTextColor = (): string | null => {
+      const sel = document.getSelection();
+      if (!sel || !sel.anchorNode) return null;
+      const node = sel.anchorNode;
+      const parent =
+        node.nodeType === Node.ELEMENT_NODE
+          ? (node as Element)
+          : node.parentElement;
+      if (!parent) return null;
+      try {
+        return getComputedStyle(parent).color || null;
+      } catch {
+        return null;
+      }
+    };
+
     const showButton = (text: string, rect: DOMRect) => {
       closeMount();
       // Clamp X so the bar never crosses the viewport's right edge
@@ -74,10 +92,12 @@ export default defineContentScript({
       const maxX = window.scrollX + window.innerWidth - FLOAT_W - FLOAT_GUTTER;
       const x = Math.max(0, Math.min(rawX, maxX));
       const y = Math.max(0, rect.top + window.scrollY);
+      const color = selectionTextColor();
       const next = mountShadow(
         <FloatingButton
           onTranslate={() => showPopup(text, rect, 'translate')}
           onSummary={() => showPopup(text, rect, 'summarize')}
+          color={color}
         />,
         { x, y },
       );
