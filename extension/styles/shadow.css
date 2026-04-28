@@ -12,16 +12,39 @@ button {
   cursor: pointer;
 }
 
-.bcb-floating {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+/* Selection floating bar — two pill buttons side by side. Clicking either
+   one runs the action immediately (no intermediate "choose" popup). */
+.bcb-floating-bar {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
   border: 1px solid #ddd;
   background: white;
+  border-radius: 9px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  font-size: 14px;
-  line-height: 26px;
-  padding: 0;
+}
+.bcb-floating-btn {
+  padding: 3px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: #333;
+  cursor: pointer;
+}
+.bcb-floating-btn:hover {
+  background: #f0f0f0;
+}
+:host([data-theme='dark']) .bcb-floating-bar {
+  background: #1f1f1f;
+  border-color: #333;
+}
+:host([data-theme='dark']) .bcb-floating-btn {
+  color: #eee;
+}
+:host([data-theme='dark']) .bcb-floating-btn:hover {
+  background: #2a2a2a;
 }
 
 .bcb-popup {

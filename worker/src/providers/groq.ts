@@ -5,6 +5,10 @@ export const groq: Provider = {
   async call(input: ProviderInput, fetchImpl: typeof fetch = fetch): Promise<ProviderResult> {
     let res: Response;
     try {
+      const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
+      if (input.system) messages.push({ role: 'system', content: input.system });
+      messages.push({ role: 'user', content: input.prompt });
+
       res = await fetchImpl('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -13,7 +17,7 @@ export const groq: Provider = {
         },
         body: JSON.stringify({
           model: 'llama-3.3-70b-versatile',
-          messages: [{ role: 'user', content: input.prompt }],
+          messages,
           temperature: input.temperature,
         }),
       });

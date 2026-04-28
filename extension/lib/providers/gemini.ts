@@ -8,17 +8,25 @@ export const gemini: Provider = {
   async call(input: ProviderInput, fetchImpl: typeof fetch = fetch): Promise<ProviderResult> {
     let res: Response;
     try {
+      const body: Record<string, unknown> = {
+        contents: [{ role: 'user', parts: [{ text: input.prompt }] }],
+        generationConfig: {
+          temperature: input.temperature,
+          responseMimeType: 'text/plain',
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      };
+      if (input.system) {
+        // systemInstruction is a top-level field in Gemini v1beta. Putting
+        // the rules here (instead of inlining them into the user message)
+        // prevents the model from translating the rules along with the
+        // source text.
+        body.systemInstruction = { parts: [{ text: input.system }] };
+      }
       res = await fetchImpl(buildUrl('gemini-2.5-flash', input.apiKey), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: input.prompt }] }],
-          generationConfig: {
-            temperature: input.temperature,
-            responseMimeType: 'text/plain',
-            thinkingConfig: { thinkingBudget: 0 },
-          },
-        }),
+        body: JSON.stringify(body),
       });
     } catch {
       throw { kind: 'network' };

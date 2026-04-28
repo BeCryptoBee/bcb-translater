@@ -32,7 +32,7 @@ export async function handleProcess(
     return { ok: true, result: cached, provider: 'gemini', cached: true };
   }
 
-  const prompt =
+  const built =
     req.mode === 'translate'
       ? buildTranslatePrompt({ text: req.text, targetLang })
       : buildSummarizePrompt({ text: req.text, targetLang });
@@ -45,7 +45,8 @@ export async function handleProcess(
 
     if (settings.userApiKey) {
       const r = await callWithFallback(settings.provider, {
-        prompt,
+        system: built.system,
+        prompt: built.user,
         temperature,
         apiKey: settings.userApiKey,
       });
@@ -65,13 +66,14 @@ export async function handleProcess(
       const srcN = (req.text.match(/\n/g) ?? []).length;
       const dstN = (result.match(/\n/g) ?? []).length;
       if (srcN >= 2 && dstN < srcN / 2) {
-        const reinforced =
-          prompt +
+        const reinforcedSystem =
+          built.system +
           '\n\nREMINDER: The source has line breaks. The output MUST contain the same number of line breaks in the same positions.';
         try {
           if (settings.userApiKey) {
             const r2 = await callWithFallback(settings.provider, {
-              prompt: reinforced,
+              system: reinforcedSystem,
+              prompt: built.user,
               temperature,
               apiKey: settings.userApiKey,
             });

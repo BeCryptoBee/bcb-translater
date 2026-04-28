@@ -14,8 +14,9 @@ export default defineContentScript({
     let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
     let pendingShow: number | null = null;
 
-    // Floating button size (matches .bcb-floating in shadow.css).
-    const FLOAT_W = 28;
+    // Approximate width of the two-button floating bar (.bcb-floating-bar).
+    // Used to clamp X so the bar doesn't push past the viewport's right edge.
+    const FLOAT_W = 160;
     const FLOAT_GUTTER = 8;
     // Time selection must be stable before we mount the button. This eliminates
     // the flicker that came from remounting on every selectionchange while the
@@ -67,14 +68,17 @@ export default defineContentScript({
 
     const showButton = (text: string, rect: DOMRect) => {
       closeMount();
-      // Clamp X so the button never crosses the viewport's right edge
+      // Clamp X so the bar never crosses the viewport's right edge
       // (which would otherwise add horizontal scroll on the host page).
       const rawX = rect.right + window.scrollX + 4;
       const maxX = window.scrollX + window.innerWidth - FLOAT_W - FLOAT_GUTTER;
       const x = Math.max(0, Math.min(rawX, maxX));
       const y = Math.max(0, rect.top + window.scrollY);
       const next = mountShadow(
-        <FloatingButton onClick={() => showPopup(text, rect)} />,
+        <FloatingButton
+          onTranslate={() => showPopup(text, rect, 'translate')}
+          onSummary={() => showPopup(text, rect, 'summarize')}
+        />,
         { x, y },
       );
       mount = next;
@@ -151,16 +155,18 @@ export default defineContentScript({
     // under foreign-language tweets. Hostname guard matches x.com, twitter.com
     // and any subdomain (e.g. mobile.x.com).
     if (/(?:^|\.)(?:x\.com|twitter\.com)$/.test(location.hostname)) {
-      startTweetInjector((text, anchor) => {
-        // Position the popup relative to the WHOLE tweet, not the small inline
-        // button. The button's rect is only ~80px wide, so "to the right of
-        // the button" lands inside the tweet body. The article rect's right
-        // edge sits past the entire tweet, so the popup lands beside it.
+      startTweetInjector((text, tweetTextEl, mode) => {
+        // Mix two rects: take horizontal extent from the whole article so the
+        // popup lands BESIDE the tweet (not inside it), but take the vertical
+        // start from the tweet text itself so the popup aligns with the
+        // beginning of the content rather than the username header above it.
         const article =
-          (anchor.closest('article[role="article"]') as HTMLElement | null) ??
-          (anchor.closest('article') as HTMLElement | null);
-        const rect = (article ?? anchor).getBoundingClientRect();
-        showPopup(text, rect);
+          (tweetTextEl.closest('article[role="article"]') as HTMLElement | null) ??
+          (tweetTextEl.closest('article') as HTMLElement | null);
+        const aRect = (article ?? tweetTextEl).getBoundingClientRect();
+        const tRect = tweetTextEl.getBoundingClientRect();
+        const rect = new DOMRect(aRect.left, tRect.top, aRect.width, aRect.height);
+        showPopup(text, rect, mode);
       });
     }
   },

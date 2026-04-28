@@ -49,7 +49,7 @@ export default {
     const q = await checkAndIncrement(env.QUOTA_KV, installId);
     if (!q.allowed) return json(429, { error: 'quota_exhausted' });
 
-    const prompt =
+    const built =
       b.mode === 'translate'
         ? buildTranslatePrompt({ text: b.text, targetLang: b.targetLang })
         : buildSummarizePrompt({ text: b.text, targetLang: b.targetLang });
@@ -57,7 +57,7 @@ export default {
     try {
       const r = await callWithFallback(
         'auto',
-        { prompt, temperature: TEMPERATURES[b.mode] },
+        { system: built.system, prompt: built.user, temperature: TEMPERATURES[b.mode] },
         { gemini: env.GEMINI_API_KEY, groq: env.GROQ_API_KEY },
       );
       return json(200, { result: r.text, provider: r.provider, remainingQuota: q.remaining });

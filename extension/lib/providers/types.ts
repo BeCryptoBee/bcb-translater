@@ -1,6 +1,11 @@
 export type ProviderName = 'gemini' | 'groq';
 
 export interface ProviderInput {
+  /** Optional system instruction. Sent in role:'system' (chat) or
+   *  systemInstruction (Gemini). Use this for the rules so the model never
+   *  treats them as data to translate or summarize. */
+  system?: string;
+  /** User content. The actual text to translate / summarize. */
   prompt: string;
   temperature: number;
   apiKey: string;

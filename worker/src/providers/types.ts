@@ -1,6 +1,7 @@
 export type ProviderName = 'gemini' | 'groq';
 
 export interface ProviderInput {
+  system?: string;
   prompt: string;
   temperature: number;
   apiKey: string;

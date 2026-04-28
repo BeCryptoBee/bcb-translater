@@ -4,7 +4,7 @@ import type { Provider, ProviderName } from './providers/types';
 
 export async function callWithFallback(
   preference: 'auto' | ProviderName,
-  promptInput: { prompt: string; temperature: number },
+  promptInput: { system?: string; prompt: string; temperature: number },
   keys: { gemini: string; groq: string },
 ): Promise<{ text: string; provider: ProviderName }> {
   const order: Array<[Provider, string]> =

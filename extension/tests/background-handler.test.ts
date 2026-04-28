@@ -156,8 +156,10 @@ describe('handleProcess', () => {
     expect(args[0]).toBe('gemini');
     expect(args[1].apiKey).toBe('sk-x');
     expect(args[1].temperature).toBe(0.3);
-    expect(typeof args[1].prompt).toBe('string');
-    expect(args[1].prompt).toContain('Hello, world!');
+    // user message is the raw source; system carries the rules.
+    expect(args[1].prompt).toBe('Hello, world!');
+    expect(typeof args[1].system).toBe('string');
+    expect(args[1].system).toMatch(/HARD RULES/);
   });
 
   it('uses proxy path when userApiKey is empty and increments local quota', async () => {
@@ -236,9 +238,9 @@ describe('handleProcess', () => {
     const r = await handleProcess({ ...baseReq, text: multiline }, store);
     expect(r).toMatchObject({ ok: true, result: 'один\nдва\nтри', provider: 'gemini' });
     expect(callWithFallbackMock).toHaveBeenCalledTimes(2);
-    // The reinforced prompt must mention the line-break reminder.
+    // The reinforced system prompt must mention the line-break reminder.
     const secondCall = callWithFallbackMock.mock.calls[1]!;
-    expect(secondCall[1].prompt).toContain('REMINDER');
+    expect(secondCall[1].system).toContain('REMINDER');
   });
 
   it('keeps original result if retry fails', async () => {

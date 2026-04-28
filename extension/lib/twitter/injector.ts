@@ -1,21 +1,16 @@
 import { detectLanguage } from '~/lib/lang-detect';
 import { getSettings, onSettingsChange, type Settings } from '~/lib/storage';
+import type { Mode } from '~/lib/messages';
 import { TWEET_SELECTORS } from './selectors';
 
 const FLAG = 'data-bcb-injected';
 const BTN_CLASS = 'bcb-tweet-btn';
+const WRAP_CLASS = 'bcb-tweet-btn-wrap';
 const SCAN_DEBOUNCE_MS = 200;
 
 function buildBtnStyle(color: string): string {
-  // X.com tweet bodies sit inside a flex-column whose children take 100% width
-  // by default, so display:inline-block is not enough — the button still
-  // stretches. Force its size to its content with width:fit-content, plus
-  // display:block so it sits on its own line above the tweet text.
+  // Single pill style; multiple pills sit side by side inside a flex wrapper.
   return [
-    'display:block',
-    'width:fit-content',
-    'max-width:fit-content',
-    'margin:4px 0 6px 0',
     'padding:2px 10px',
     'border:1px solid currentColor',
     'border-radius:9999px',
@@ -28,12 +23,25 @@ function buildBtnStyle(color: string): string {
   ].join(';');
 }
 
-type OnClick = (text: string, anchor: HTMLElement) => void;
+function buildWrapStyle(): string {
+  // Flex row that hugs its content so the two pills don't stretch across
+  // the tweet width inside X.com's flex-column layout.
+  return [
+    'display:flex',
+    'gap:6px',
+    'width:fit-content',
+    'max-width:fit-content',
+    'margin:4px 0 6px 0',
+  ].join(';');
+}
+
+type OnClick = (text: string, tweetTextEl: HTMLElement, mode: Mode) => void;
 
 function cleanupAllButtons(): void {
-  // Remove every injected button and clear flags so the next scan can re-inject.
-  const btns = document.querySelectorAll<HTMLElement>(`.${BTN_CLASS}`);
-  btns.forEach((b) => b.remove());
+  // Remove every injected wrapper (which contains the two pill buttons) and
+  // clear flags so the next scan can re-inject.
+  const wraps = document.querySelectorAll<HTMLElement>(`.${WRAP_CLASS}`);
+  wraps.forEach((w) => w.remove());
   const flagged = document.querySelectorAll<HTMLElement>(`[${FLAG}]`);
   flagged.forEach((el) => el.removeAttribute(FLAG));
 }
@@ -58,17 +66,27 @@ async function runScan(onClick: OnClick): Promise<void> {
     const lang = detectLanguage(text);
     if (lang === settings.targetLang) continue;
 
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = 'Translate / Summary';
-    btn.className = BTN_CLASS;
-    btn.style.cssText = buildBtnStyle(settings.tweetButtonColor);
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      onClick(text, btn);
-    });
-    t.insertAdjacentElement('beforebegin', btn);
+    const wrap = document.createElement('span');
+    wrap.className = WRAP_CLASS;
+    wrap.style.cssText = buildWrapStyle();
+
+    const makeBtn = (label: string, mode: Mode): HTMLButtonElement => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.className = BTN_CLASS;
+      b.style.cssText = buildBtnStyle(settings.tweetButtonColor);
+      b.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick(text, t, mode);
+      });
+      return b;
+    };
+
+    wrap.appendChild(makeBtn('Translate', 'translate'));
+    wrap.appendChild(makeBtn('Summary', 'summarize'));
+    t.insertAdjacentElement('beforebegin', wrap);
   }
 }
 

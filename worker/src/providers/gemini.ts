@@ -8,17 +8,21 @@ export const gemini: Provider = {
   async call(input: ProviderInput, fetchImpl: typeof fetch = fetch): Promise<ProviderResult> {
     let res: Response;
     try {
+      const body: Record<string, unknown> = {
+        contents: [{ role: 'user', parts: [{ text: input.prompt }] }],
+        generationConfig: {
+          temperature: input.temperature,
+          responseMimeType: 'text/plain',
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      };
+      if (input.system) {
+        body.systemInstruction = { parts: [{ text: input.system }] };
+      }
       res = await fetchImpl(buildUrl('gemini-2.5-flash', input.apiKey), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: input.prompt }] }],
-          generationConfig: {
-            temperature: input.temperature,
-            responseMimeType: 'text/plain',
-            thinkingConfig: { thinkingBudget: 0 },
-          },
-        }),
+        body: JSON.stringify(body),
       });
     } catch {
       throw { kind: 'network' };
