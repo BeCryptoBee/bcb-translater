@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "types": ["chrome", "vite/client"],
+    "paths": { "~/*": ["./*"] }
+  },
+  "include": ["entrypoints", "components", "lib", "tests"]
+}
