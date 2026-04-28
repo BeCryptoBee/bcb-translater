@@ -152,7 +152,14 @@ export default defineContentScript({
     // and any subdomain (e.g. mobile.x.com).
     if (/(?:^|\.)(?:x\.com|twitter\.com)$/.test(location.hostname)) {
       startTweetInjector((text, anchor) => {
-        const rect = anchor.getBoundingClientRect();
+        // Position the popup relative to the WHOLE tweet, not the small inline
+        // button. The button's rect is only ~80px wide, so "to the right of
+        // the button" lands inside the tweet body. The article rect's right
+        // edge sits past the entire tweet, so the popup lands beside it.
+        const article =
+          (anchor.closest('article[role="article"]') as HTMLElement | null) ??
+          (anchor.closest('article') as HTMLElement | null);
+        const rect = (article ?? anchor).getBoundingClientRect();
         showPopup(text, rect);
       });
     }
