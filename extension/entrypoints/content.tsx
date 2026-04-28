@@ -76,9 +76,9 @@ export default defineContentScript({
       document.removeEventListener('mouseup', mouseupHandler, true);
     });
 
-    // Approximate width of the two-button floating bar (.bcb-floating-bar).
+    // Approximate width of the two-letter floating bar (.bcb-floating-bar).
     // Used to clamp X so the bar doesn't push past the viewport's right edge.
-    const FLOAT_W = 160;
+    const FLOAT_W = 64;
     const FLOAT_GUTTER = 8;
     // Time selection must be stable before we mount the button. This eliminates
     // the flicker that came from remounting on every selectionchange while the

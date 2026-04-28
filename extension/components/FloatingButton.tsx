@@ -25,16 +25,18 @@ export function FloatingButton({ onTranslate, onSummary, color }: Props) {
         className="bcb-floating-btn"
         onClick={onTranslate}
         aria-label="Translate selection"
+        title="Translate"
       >
-        Translate
+        T
       </button>
       <button
         type="button"
         className="bcb-floating-btn"
         onClick={onSummary}
         aria-label="Summarize selection"
+        title="Summary"
       >
-        Summary
+        S
       </button>
     </div>
   );

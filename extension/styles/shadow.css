@@ -33,14 +33,17 @@ button {
   -webkit-backdrop-filter: blur(6px);
 }
 .bcb-floating-btn {
-  padding: 4px 12px;
+  /* Single-letter buttons (T, S): compact, square-ish, centered. */
+  min-width: 24px;
+  padding: 4px 6px;
   border: none;
   background: transparent;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 16px;
-  font-weight: 500;
+  font-weight: 700;
   color: inherit;
   cursor: pointer;
+  text-align: center;
 }
 .bcb-floating-btn + .bcb-floating-btn {
   /* Translucent black divider — coherent with the black-text colour scheme. */
