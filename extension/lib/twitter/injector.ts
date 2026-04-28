@@ -46,6 +46,12 @@ function cleanupAllButtons(): void {
   flagged.forEach((el) => el.removeAttribute(FLAG));
 }
 
+// Routes where the tweets we'd see are tiny previews of someone else's
+// activity (notifications, DM previews) rather than primary content the
+// user is actively reading. Skip injection there entirely — selection-
+// based translation still works, just no inline button.
+const SKIP_PATHS = /^\/(?:notifications|messages)(?:\/|$)/;
+
 async function runScan(onClick: OnClick): Promise<void> {
   let settings: Settings;
   try {
@@ -54,6 +60,12 @@ async function runScan(onClick: OnClick): Promise<void> {
     return;
   }
   if (!settings.showInlineOnTweets) return;
+  if (SKIP_PATHS.test(location.pathname)) {
+    // Defensive: if the user just navigated INTO a skip route, prune any
+    // buttons that lingered on now-hidden but still-mounted nodes.
+    cleanupAllButtons();
+    return;
+  }
 
   const tweets = document.querySelectorAll<HTMLElement>(TWEET_SELECTORS.text);
   for (const t of tweets) {
