@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.pnp.*
+.yarn/
+jspm_packages/
+
+# Build output
+dist/
+.output/
+.wxt/
+build/
+out/
+*.zip
+*.crx
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+wrangler.toml.local
+*.local
+.wrangler/
+secrets/
+
+# Editor / IDE
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache
+.cache/
+.turbo/
+.parcel-cache/
+.eslintcache
+
+# Coverage / tests
+coverage/
+.nyc_output/
+
+# TypeScript
+*.tsbuildinfo
+
+# Antigravity / Claude metadata (project-local; not source)
+.agent/
+.claude/
