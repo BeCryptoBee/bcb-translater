@@ -5,7 +5,7 @@ export default defineConfig({
   manifest: {
     name: 'BCB Translator',
     description: 'Fast LLM translation and summarization with structure preservation',
-    permissions: ['storage', 'contextMenus', 'activeTab'],
+    permissions: ['storage', 'contextMenus', 'activeTab', 'scripting'],
     host_permissions: ['<all_urls>'],
     commands: {
       'translate-selection': {

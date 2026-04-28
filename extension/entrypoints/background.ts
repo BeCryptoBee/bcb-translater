@@ -43,12 +43,62 @@ export default defineBackground(() => {
   chrome.runtime.onInstalled.addListener(buildMenus);
   chrome.runtime.onStartup.addListener(buildMenus);
 
+  // After an extension update / reload, every tab that was already open
+  // still hosts the OLD content script, which Chrome has already detached
+  // from chrome.runtime — sendMessage to it silently fails. Re-inject a
+  // fresh content script into every eligible tab so the right-click menu
+  // and hotkeys work without asking the user to F5 each tab.
+  const reinjectAllTabs = async (): Promise<void> => {
+    let tabs: chrome.tabs.Tab[] = [];
+    try {
+      tabs = await chrome.tabs.query({});
+    } catch {
+      return;
+    }
+    for (const tab of tabs) {
+      if (!tab.id || !tab.url) continue;
+      if (!/^https?:\/\//i.test(tab.url)) continue;
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id, allFrames: false },
+          files: ['content-scripts/content.js'],
+        });
+      } catch {
+        // Tab may be a chrome:// page, the web store, etc. — ignore.
+      }
+    }
+  };
+  chrome.runtime.onInstalled.addListener(reinjectAllTabs);
+
+  // Try to send a trigger-action message; if no listener (stale tab), inject
+  // the content script once and retry. Single fallback, no retry storm.
+  const sendTrigger = async (
+    tabId: number,
+    payload: { type: 'trigger-action'; mode: 'translate' | 'summarize'; text?: string },
+  ): Promise<void> => {
+    try {
+      await chrome.tabs.sendMessage(tabId, payload);
+    } catch {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId, allFrames: false },
+          files: ['content-scripts/content.js'],
+        });
+        // Give the freshly-injected listener a moment to attach.
+        await new Promise((r) => setTimeout(r, 50));
+        await chrome.tabs.sendMessage(tabId, payload);
+      } catch (e) {
+        console.error('[bcb] context menu / hotkey: cannot deliver to tab', tabId, e);
+      }
+    }
+  };
+
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (!tab?.id || !info.selectionText) return;
     const id = String(info.menuItemId);
     if (id !== 'bcb-translate' && id !== 'bcb-summarize') return;
     const mode = id === 'bcb-translate' ? 'translate' : 'summarize';
-    chrome.tabs.sendMessage(tab.id, {
+    void sendTrigger(tab.id, {
       type: 'trigger-action',
       mode,
       text: info.selectionText,
@@ -65,6 +115,6 @@ export default defineBackground(() => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return;
     const mode = cmd === 'translate-selection' ? 'translate' : 'summarize';
-    chrome.tabs.sendMessage(tab.id, { type: 'trigger-action', mode });
+    void sendTrigger(tab.id, { type: 'trigger-action', mode });
   });
 });
