@@ -11,9 +11,28 @@ export default defineContentScript({
   runAt: 'document_idle',
   main() {
     let mount: ShadowMount | null = null;
+    // Tagged so selectionchange-cleared can dismiss only the floating bar,
+    // never the result popup (the user may want to keep reading the result
+    // even after they cleared the selection).
+    let mountKind: 'floating' | 'popup' | null = null;
     let pointerDownHandler: ((e: PointerEvent) => void) | null = null;
     let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
     let pendingShow: number | null = null;
+
+    // Track the last mouseup position to anchor the floating bar there.
+    // For mouse-driven selections, this matches the user's eyes; for
+    // keyboard-driven selections (Ctrl+A, Shift+Arrow), we fall back to
+    // the end of the last visible line of the selection.
+    const lastMouseup = { x: 0, y: 0, t: 0 };
+    document.addEventListener(
+      'mouseup',
+      (e) => {
+        lastMouseup.x = e.clientX;
+        lastMouseup.y = e.clientY;
+        lastMouseup.t = Date.now();
+      },
+      true,
+    );
 
     // Approximate width of the two-button floating bar (.bcb-floating-bar).
     // Used to clamp X so the bar doesn't push past the viewport's right edge.
@@ -47,6 +66,7 @@ export default defineContentScript({
       if (!mount) return;
       mount.unmount();
       mount = null;
+      mountKind = null;
       detachDismiss();
     };
 
@@ -81,14 +101,39 @@ export default defineContentScript({
     // Detach on hot-reload of the content script (defensive).
     window.addEventListener('beforeunload', () => unsubAccent(), { once: true });
 
+    // Decide where to anchor the floating bar (in viewport coordinates).
+    // Priority:
+    //   1. Recent mouseup (< 800ms ago) — user just released the mouse to
+    //      finish a drag-select; anchor a touch down-right of that point.
+    //   2. End of the last visible line of the selection — for keyboard
+    //      selection (Ctrl+A, Shift+Arrow) this lands at the cursor.
+    //   3. Bounding rect of the selection — last-resort fallback.
+    const computeBarAnchor = (sel: { rect: DOMRect }): { x: number; y: number } => {
+      const recent = Date.now() - lastMouseup.t < 800;
+      if (recent) {
+        return { x: lastMouseup.x + 8, y: lastMouseup.y + 8 };
+      }
+      const live = document.getSelection();
+      if (live && live.rangeCount > 0 && !live.isCollapsed) {
+        const range = live.getRangeAt(0);
+        const rects = range.getClientRects();
+        const last = rects[rects.length - 1];
+        if (last && last.width > 0) {
+          return { x: last.right + 4, y: last.top };
+        }
+      }
+      return { x: sel.rect.right + 4, y: sel.rect.top };
+    };
+
     const showButton = (text: string, rect: DOMRect) => {
       closeMount();
-      // Clamp X so the bar never crosses the viewport's right edge
-      // (which would otherwise add horizontal scroll on the host page).
-      const rawX = rect.right + window.scrollX + 4;
+      const anchor = computeBarAnchor({ rect });
+      // Clamp X/Y so the bar stays within the viewport (no horizontal scroll,
+      // no off-screen Y when a selection runs past the visible area).
       const maxX = window.scrollX + window.innerWidth - FLOAT_W - FLOAT_GUTTER;
-      const x = Math.max(0, Math.min(rawX, maxX));
-      const y = Math.max(0, rect.top + window.scrollY);
+      const maxY = window.scrollY + window.innerHeight - 40;
+      const x = Math.max(0, Math.min(anchor.x + window.scrollX, maxX));
+      const y = Math.max(0, Math.min(anchor.y + window.scrollY, maxY));
       const next = mountShadow(
         <FloatingButton
           onTranslate={() => showPopup(text, rect, 'translate')}
@@ -98,6 +143,7 @@ export default defineContentScript({
         { x, y },
       );
       mount = next;
+      mountKind = 'floating';
       attachDismiss(next);
     };
 
@@ -149,11 +195,20 @@ export default defineContentScript({
         pos,
       );
       mount = next;
+      mountKind = 'popup';
       attachDismiss(next);
     };
 
     watchSelection((sel) => {
-      if (!sel) return; // do not auto-clear: user may be moving cursor
+      if (!sel) {
+        // Selection went away (typed over, deleted, clicked elsewhere). Drop
+        // any pending mount AND close the floating bar if it's the visible
+        // mount. We do NOT close the result popup on selection clear — the
+        // user may have read the result and just moved the cursor on.
+        cancelPendingShow();
+        if (mountKind === 'floating') closeMount();
+        return;
+      }
       // Debounce: only mount the button after the user has stopped extending
       // the selection for a moment. This single change kills the flicker
       // caused by selectionchange firing on every pixel of mouse drag.
