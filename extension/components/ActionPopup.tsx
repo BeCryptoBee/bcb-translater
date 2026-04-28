@@ -41,22 +41,57 @@ export function ActionPopup({ text, onClose, defaultMode }: Props) {
 
   const run = async (mode: Mode) => {
     setState({ phase: 'loading', mode });
-    const settings = await getSettings();
-    setTargetLang(settings.targetLang);
+    let lang = 'uk';
+    try {
+      const settings = await getSettings();
+      lang = settings.targetLang;
+      setTargetLang(lang);
+    } catch {
+      // chrome.storage may be unreachable on a stale tab whose extension
+      // context was invalidated. Fall through with the 'uk' default.
+    }
     const request: ProcessRequest = {
       type: 'process',
       mode,
       text,
-      targetLang: settings.targetLang,
+      targetLang: lang,
     };
-    const resp: ProcessResponse = await chrome.runtime.sendMessage(request);
+    let resp: ProcessResponse;
+    try {
+      resp = await chrome.runtime.sendMessage(request);
+    } catch (e) {
+      // Common failure modes after the user reloaded the extension while
+      // this page was already open — content script's chrome.runtime is
+      // detached, so no message can reach the new background.
+      const msg = String((e as Error)?.message ?? '');
+      const detached =
+        msg.includes('Extension context invalidated') ||
+        msg.includes('Could not establish connection') ||
+        msg.includes('Receiving end does not exist');
+      resp = detached
+        ? {
+            ok: false,
+            code: 'unknown',
+            message: 'Extension was reloaded — please refresh this page (F5) and try again.',
+          }
+        : {
+            ok: false,
+            code: 'unknown',
+            message: msg ? `Connection failed: ${msg}` : 'Connection failed.',
+          };
+    }
     setState({ phase: 'result', mode, resp });
   };
 
   // Auto-run once on mount when a defaultMode was supplied (e.g. context menu / hotkey).
   useEffect(() => {
     if (defaultMode) void run(defaultMode);
-    else void getSettings().then((s) => setTargetLang(s.targetLang));
+    else
+      void getSettings()
+        .then((s) => setTargetLang(s.targetLang))
+        .catch(() => {
+          /* stale tab; keep the default */
+        });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

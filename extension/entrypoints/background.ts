@@ -12,7 +12,22 @@ const storeAdapter: StorageAdapter = {
 export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!isProcessRequest(msg)) return false;
-    handleProcess(msg, storeAdapter).then(sendResponse);
+    handleProcess(msg, storeAdapter)
+      .then(sendResponse)
+      .catch((e) => {
+        // Don't leak unhandled rejections into the SW error log; surface
+        // a structured error to the caller instead.
+        console.error('[bcb] handleProcess crashed:', e);
+        try {
+          sendResponse({
+            ok: false,
+            code: 'unknown',
+            message: 'Internal error — please try again.',
+          });
+        } catch {
+          /* sendResponse channel may be closed; nothing to do. */
+        }
+      });
     return true; // keep channel open for async response
   });
 
