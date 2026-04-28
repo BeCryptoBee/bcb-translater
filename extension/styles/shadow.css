@@ -15,11 +15,16 @@ button {
 /* Selection floating bar — segmented control on a frosted accent surface.
    Background is the user's accent color at ~88% opacity (inlined by
    content.tsx); the backdrop-filter blur frosts whatever shows through.
-   Text is always white so contrast is readable on any color and any
-   host page background. */
+   Text is black with a thin white halo (text-shadow on all 4 sides) so
+   it's readable on both pale and dark accent colors. */
 .bcb-floating-bar {
   display: inline-flex;
-  color: #fff;
+  color: #000;
+  text-shadow:
+    -1px 0 0 rgba(255, 255, 255, 0.85),
+    1px 0 0 rgba(255, 255, 255, 0.85),
+    0 -1px 0 rgba(255, 255, 255, 0.85),
+    0 1px 0 rgba(255, 255, 255, 0.85);
   background: rgba(120, 120, 120, 0.85); /* fallback if no inline color set */
   border-radius: 8px;
   overflow: hidden;
@@ -38,11 +43,11 @@ button {
   cursor: pointer;
 }
 .bcb-floating-btn + .bcb-floating-btn {
-  /* Translucent white divider — visible on any accent the user picks. */
-  border-left: 1px solid rgba(255, 255, 255, 0.28);
+  /* Translucent black divider — coherent with the black-text colour scheme. */
+  border-left: 1px solid rgba(0, 0, 0, 0.22);
 }
 .bcb-floating-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .bcb-popup {
