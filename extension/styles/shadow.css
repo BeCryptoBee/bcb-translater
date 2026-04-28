@@ -12,19 +12,17 @@ button {
   cursor: pointer;
 }
 
-/* Selection floating bar — segmented-control style.
-   Single rounded container holds the two buttons, divided by a thin line.
-   Tints are derived from the user's accent color via color-mix, so the
-   bar feels coherent with the tweet button without screaming. */
+/* Selection floating bar — segmented control with a solid accent surface.
+   The bar's background is the user's chosen accent color (set inline by
+   content.tsx via style.background); text is always black so contrast is
+   readable on any host page. Soft shadow lifts it off the document. */
 .bcb-floating-bar {
   display: inline-flex;
-  color: #333;
-  border: 1px solid color-mix(in srgb, currentColor 38%, transparent);
+  color: #000;
+  background: rgba(160, 160, 160, 0.95); /* fallback if no inline color set */
   border-radius: 8px;
   overflow: hidden;
-  background: color-mix(in srgb, currentColor 7%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 .bcb-floating-btn {
   padding: 4px 12px;
@@ -37,14 +35,11 @@ button {
   cursor: pointer;
 }
 .bcb-floating-btn + .bcb-floating-btn {
-  border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  /* Translucent black divider works on any accent color the user picks. */
+  border-left: 1px solid rgba(0, 0, 0, 0.18);
 }
 .bcb-floating-btn:hover {
-  background: color-mix(in srgb, currentColor 16%, transparent);
-}
-/* Dark fallback if no inline color was provided (rare). */
-:host([data-theme='dark']) .bcb-floating-bar {
-  color: #eee;
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .bcb-popup {
