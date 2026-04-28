@@ -12,6 +12,22 @@ export default defineContentScript({
     let mount: ShadowMount | null = null;
     let pointerDownHandler: ((e: PointerEvent) => void) | null = null;
     let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+    let pendingShow: number | null = null;
+
+    // Floating button size (matches .bcb-floating in shadow.css).
+    const FLOAT_W = 28;
+    const FLOAT_GUTTER = 8;
+    // Time selection must be stable before we mount the button. This eliminates
+    // the flicker that came from remounting on every selectionchange while the
+    // user was still dragging to extend a selection.
+    const SELECTION_DEBOUNCE_MS = 200;
+
+    const cancelPendingShow = () => {
+      if (pendingShow != null) {
+        clearTimeout(pendingShow);
+        pendingShow = null;
+      }
+    };
 
     const detachDismiss = () => {
       if (pointerDownHandler) {
@@ -25,6 +41,7 @@ export default defineContentScript({
     };
 
     const closeMount = () => {
+      cancelPendingShow();
       if (!mount) return;
       mount.unmount();
       mount = null;
@@ -50,9 +67,15 @@ export default defineContentScript({
 
     const showButton = (text: string, rect: DOMRect) => {
       closeMount();
+      // Clamp X so the button never crosses the viewport's right edge
+      // (which would otherwise add horizontal scroll on the host page).
+      const rawX = rect.right + window.scrollX + 4;
+      const maxX = window.scrollX + window.innerWidth - FLOAT_W - FLOAT_GUTTER;
+      const x = Math.max(0, Math.min(rawX, maxX));
+      const y = Math.max(0, rect.top + window.scrollY);
       const next = mountShadow(
         <FloatingButton onClick={() => showPopup(text, rect)} />,
-        { x: rect.right + window.scrollX + 4, y: rect.top + window.scrollY },
+        { x, y },
       );
       mount = next;
       attachDismiss(next);
@@ -74,7 +97,14 @@ export default defineContentScript({
 
     watchSelection((sel) => {
       if (!sel) return; // do not auto-clear: user may be moving cursor
-      showButton(sel.text, sel.rect);
+      // Debounce: only mount the button after the user has stopped extending
+      // the selection for a moment. This single change kills the flicker
+      // caused by selectionchange firing on every pixel of mouse drag.
+      cancelPendingShow();
+      pendingShow = window.setTimeout(() => {
+        pendingShow = null;
+        showButton(sel.text, sel.rect);
+      }, SELECTION_DEBOUNCE_MS);
     });
 
     chrome.runtime.onMessage.addListener((msg) => {
