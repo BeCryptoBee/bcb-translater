@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bcb-translater — logo options</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        padding: 40px;
+        background: #0f0f12;
+        color: #eaeaea;
+        font-family: -apple-system, system-ui, "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+      h1 { margin-bottom: 8px; }
+      .hint { color: #888; margin-bottom: 32px; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 32px;
+      }
+      .card {
+        background: #1a1a1f;
+        border: 1px solid #2a2a30;
+        border-radius: 12px;
+        padding: 24px;
+      }
+      .label { font-size: 13px; color: #888; margin-bottom: 8px; }
+      .title { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+      .big {
+        background: white;
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        justify-content: center;
+      }
+      .big img { width: 192px; height: 192px; }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        margin-top: 16px;
+        background: #2a2a30;
+        padding: 12px 16px;
+        border-radius: 8px;
+      }
+      .row .size-label {
+        font-size: 12px;
+        color: #888;
+        margin-right: auto;
+      }
+      .desc {
+        margin-top: 12px;
+        font-size: 13px;
+        color: #aaa;
+      }
+      .row.dark { background: #2a2a30; }
+      .row.light { background: white; }
+      .row.light .size-label { color: #666; }
+    </style>
+  </head>
+  <body>
+    <h1>bcb-translater — logo options</h1>
+    <p class="hint">Each card shows the design at 192px, then at the actual toolbar sizes (16, 32, 48) on a dark and a light Chrome toolbar background. Pick a number and tell me.</p>
+
+    <div class="grid">
+      <div class="card">
+        <div class="label">Option 1</div>
+        <div class="title">Globe</div>
+        <div class="big"><img src="option-1-globe.svg" alt="globe" /></div>
+        <div class="row dark">
+          <span class="size-label">on dark toolbar</span>
+          <img src="option-1-globe.svg" width="48" height="48" />
+          <img src="option-1-globe.svg" width="32" height="32" />
+          <img src="option-1-globe.svg" width="16" height="16" />
+        </div>
+        <div class="row light">
+          <span class="size-label">on light toolbar</span>
+          <img src="option-1-globe.svg" width="48" height="48" />
+          <img src="option-1-globe.svg" width="32" height="32" />
+          <img src="option-1-globe.svg" width="16" height="16" />
+        </div>
+        <div class="desc">Classic translation semantic. Reads as a globe even at 16px.</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Option 2</div>
+        <div class="title">Speech bubbles A → Я</div>
+        <div class="big"><img src="option-2-bubbles.svg" alt="bubbles" /></div>
+        <div class="row dark">
+          <span class="size-label">on dark toolbar</span>
+          <img src="option-2-bubbles.svg" width="48" height="48" />
+          <img src="option-2-bubbles.svg" width="32" height="32" />
+          <img src="option-2-bubbles.svg" width="16" height="16" />
+        </div>
+        <div class="row light">
+          <span class="size-label">on light toolbar</span>
+          <img src="option-2-bubbles.svg" width="48" height="48" />
+          <img src="option-2-bubbles.svg" width="32" height="32" />
+          <img src="option-2-bubbles.svg" width="16" height="16" />
+        </div>
+        <div class="desc">Two-tone, conveys A→Я translation as dialog. Brightest at small sizes.</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Option 3</div>
+        <div class="title">Monogram in gradient</div>
+        <div class="big"><img src="option-3-monogram.svg" alt="monogram" /></div>
+        <div class="row dark">
+          <span class="size-label">on dark toolbar</span>
+          <img src="option-3-monogram.svg" width="48" height="48" />
+          <img src="option-3-monogram.svg" width="32" height="32" />
+          <img src="option-3-monogram.svg" width="16" height="16" />
+        </div>
+        <div class="row light">
+          <span class="size-label">on light toolbar</span>
+          <img src="option-3-monogram.svg" width="48" height="48" />
+          <img src="option-3-monogram.svg" width="32" height="32" />
+          <img src="option-3-monogram.svg" width="16" height="16" />
+        </div>
+        <div class="desc">Brand-monogram. Abstract — flexible if functionality grows beyond translation.</div>
+      </div>
+    </div>
+  </body>
+</html>
