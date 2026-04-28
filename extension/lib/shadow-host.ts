@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import shadowCss from '~/styles/shadow.css?inline';
-import { getSettings } from '~/lib/storage';
+import { getSettings, resolveTheme } from '~/lib/storage';
 
 export interface ShadowMount {
   host: HTMLElement;
@@ -22,10 +22,11 @@ export function mountShadow(component: ReactNode, position: { x: number; y: numb
   const root = createRoot(mountPoint);
   root.render(component);
 
-  // Best-effort theme application; failures (e.g. before chrome.storage ready) keep light theme.
+  // Best-effort theme application: resolve "auto" against the system's
+  // prefers-color-scheme. Failures (e.g. chrome.storage not ready) keep light.
   void getSettings()
     .then((s) => {
-      host.dataset.theme = s.theme;
+      host.dataset.theme = resolveTheme(s.theme);
     })
     .catch(() => {
       host.dataset.theme = 'light';

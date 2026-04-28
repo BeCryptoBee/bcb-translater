@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { ResultView } from './ResultView';
 import type { Mode, ProcessRequest, ProcessResponse } from '~/lib/messages';
 import { getSettings } from '~/lib/storage';
@@ -18,6 +19,7 @@ export function ActionPopup({ text, onClose, defaultMode }: Props) {
   const [state, setState] = useState<State>(
     defaultMode ? { phase: 'loading', mode: defaultMode } : { phase: 'choose' },
   );
+  const headerRef = useRef<HTMLDivElement>(null);
 
   const run = async (mode: Mode) => {
     setState({ phase: 'loading', mode });
@@ -33,40 +35,80 @@ export function ActionPopup({ text, onClose, defaultMode }: Props) {
   };
 
   // Auto-run once on mount when a defaultMode was supplied (e.g. context menu / hotkey).
-  // Wrapped in useEffect to avoid running on every render.
   useEffect(() => {
     if (defaultMode) void run(defaultMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Drag the popup by its header. We move the Shadow-DOM host element so the
+  // popup floats freely; this does NOT affect document layout.
+  const onHeaderPointerDown = (ev: ReactPointerEvent<HTMLDivElement>) => {
+    // Don't start a drag if the user pressed the close button
+    if ((ev.target as HTMLElement).closest('.bcb-close')) return;
+    const root = headerRef.current?.getRootNode();
+    if (!(root instanceof ShadowRoot)) return;
+    const host = root.host as HTMLElement;
+
+    const startX = ev.clientX;
+    const startY = ev.clientY;
+    const rect = host.getBoundingClientRect();
+    // Convert to page coordinates (host uses position:absolute relative to body).
+    const startLeft = rect.left + window.scrollX;
+    const startTop = rect.top + window.scrollY;
+
+    ev.preventDefault();
+
+    const onMove = (e: PointerEvent) => {
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      host.style.left = `${startLeft + dx}px`;
+      host.style.top = `${startTop + dy}px`;
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  };
+
   return (
     <div className="bcb-popup">
-      <button
-        type="button"
-        className="bcb-close"
-        onClick={onClose}
-        aria-label="Close"
+      <div
+        ref={headerRef}
+        className="bcb-header"
+        onPointerDown={onHeaderPointerDown}
       >
-        ×
-      </button>
-      {state.phase === 'choose' && (
-        <div className="bcb-actions">
-          <button type="button" onClick={() => run('translate')}>
-            🌐 Translate
-          </button>
-          <button type="button" onClick={() => run('summarize')}>
-            ✂️ Summary
-          </button>
-        </div>
-      )}
-      {state.phase === 'loading' && <div className="bcb-loading">Working…</div>}
-      {state.phase === 'result' && (
-        <ResultView
-          resp={state.resp}
-          currentMode={state.mode}
-          onSwitch={(m) => void run(m)}
-        />
-      )}
+        <span className="bcb-drag-grip" aria-hidden="true">⋮⋮</span>
+        <button
+          type="button"
+          className="bcb-close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+      <div className="bcb-body">
+        {state.phase === 'choose' && (
+          <div className="bcb-actions">
+            <button type="button" onClick={() => run('translate')}>
+              Translate
+            </button>
+            <button type="button" onClick={() => run('summarize')}>
+              Summary
+            </button>
+          </div>
+        )}
+        {state.phase === 'loading' && <div className="bcb-loading">Working…</div>}
+        {state.phase === 'result' && (
+          <ResultView
+            resp={state.resp}
+            currentMode={state.mode}
+            onSwitch={(m) => void run(m)}
+          />
+        )}
+      </div>
     </div>
   );
 }

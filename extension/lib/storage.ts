@@ -3,7 +3,9 @@ export interface Settings {
   provider: 'auto' | 'gemini' | 'groq';
   userApiKey: string; // empty = use proxy
   showInlineOnTweets: boolean;
-  theme: 'light' | 'dark';
+  theme: 'light' | 'dark' | 'auto';
+  enableHotkeys: boolean; // false by default — Alt+T / Alt+S off until user opts in
+  tweetButtonColor: string; // CSS color for the inline button text on tweets
 }
 
 const DEFAULTS: Settings = {
@@ -11,7 +13,9 @@ const DEFAULTS: Settings = {
   provider: 'auto',
   userApiKey: '',
   showInlineOnTweets: true,
-  theme: 'light',
+  theme: 'auto',
+  enableHotkeys: false,
+  tweetButtonColor: '#9ca3af',
 };
 
 export async function getSettings(): Promise<Settings> {
@@ -34,4 +38,17 @@ export function onSettingsChange(cb: (next: Settings) => void): () => void {
   };
   chrome.storage.onChanged.addListener(handler);
   return () => chrome.storage.onChanged.removeListener(handler);
+}
+
+/**
+ * Resolve the configured theme to a concrete value. When the theme is "auto",
+ * follow the system preference via prefers-color-scheme. Safe to call from
+ * any context that has window.matchMedia (content scripts, popup).
+ */
+export function resolveTheme(theme: Settings['theme']): 'light' | 'dark' {
+  if (theme !== 'auto') return theme;
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return 'light';
+  }
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }

@@ -4,9 +4,23 @@ import { TWEET_SELECTORS } from './selectors';
 
 const FLAG = 'data-bcb-injected';
 const BTN_CLASS = 'bcb-tweet-btn';
-const BTN_STYLE =
-  'margin-bottom:6px; padding:4px 8px; border:1px solid #ccc; border-radius:6px; background:transparent; cursor:pointer; font-size:13px;';
 const SCAN_DEBOUNCE_MS = 200;
+
+function buildBtnStyle(color: string): string {
+  return [
+    'display:inline-block',
+    'margin:4px 0 6px 0',
+    'padding:2px 10px',
+    'border:1px solid currentColor',
+    'border-radius:9999px',
+    'background:transparent',
+    'cursor:pointer',
+    'font-size:12px',
+    'line-height:18px',
+    'opacity:0.85',
+    `color:${color}`,
+  ].join(';');
+}
 
 type OnClick = (text: string, anchor: HTMLElement) => void;
 
@@ -42,7 +56,7 @@ async function runScan(onClick: OnClick): Promise<void> {
     btn.type = 'button';
     btn.textContent = 'Translate / Summary';
     btn.className = BTN_CLASS;
-    btn.style.cssText = BTN_STYLE;
+    btn.style.cssText = buildBtnStyle(settings.tweetButtonColor);
     btn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -70,23 +84,36 @@ export function startTweetInjector(onClick: OnClick): () => void {
   // happens after a short delay, allowing the page to settle).
   schedule();
 
-  // React to settings changes: when the toggle flips off, remove existing
-  // buttons immediately. When it flips on, force a fresh scan now.
-  let lastShow: boolean | null = null;
+  // React to settings changes that affect the inline button: visibility
+  // toggle, target language (language detection re-evaluation) and color.
+  // Any of these flip → remove existing buttons; if visibility is on, rescan.
+  type Snap = { show: boolean; color: string; targetLang: string };
+  let lastSnap: Snap | null = null;
   void getSettings().then((s) => {
-    lastShow = s.showInlineOnTweets;
+    lastSnap = {
+      show: s.showInlineOnTweets,
+      color: s.tweetButtonColor,
+      targetLang: s.targetLang,
+    };
   });
   const unsubscribeSettings = onSettingsChange((next) => {
-    const prev = lastShow;
-    lastShow = next.showInlineOnTweets;
-    if (prev === next.showInlineOnTweets) return;
-    if (!next.showInlineOnTweets) {
-      cleanupAllButtons();
-    } else {
-      // Re-scan immediately on toggle-on so user sees buttons without waiting.
-      cleanupAllButtons();
-      void runScan(onClick);
+    const snap: Snap = {
+      show: next.showInlineOnTweets,
+      color: next.tweetButtonColor,
+      targetLang: next.targetLang,
+    };
+    const prev = lastSnap;
+    lastSnap = snap;
+    if (!prev) return;
+    if (
+      prev.show === snap.show &&
+      prev.color === snap.color &&
+      prev.targetLang === snap.targetLang
+    ) {
+      return;
     }
+    cleanupAllButtons();
+    if (snap.show) void runScan(onClick);
   });
 
   return () => {

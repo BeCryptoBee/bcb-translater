@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getSettings, setSettings, type Settings } from '~/lib/storage';
+import { getSettings, setSettings, resolveTheme, type Settings } from '~/lib/storage';
 import { getLocalQuota } from '~/lib/quota';
 
 const TARGET_LANGS = [
@@ -31,7 +31,8 @@ export function App() {
   };
 
   if (!settings) return null;
-  const dark = settings.theme === 'dark';
+  const effectiveTheme = resolveTheme(settings.theme);
+  const dark = effectiveTheme === 'dark';
 
   return (
     <div className={dark ? 'dark' : ''}>
@@ -83,20 +84,51 @@ export function App() {
           <span className="text-sm">Show inline button on tweets</span>
         </label>
 
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={settings.enableHotkeys}
+            onChange={(e) => update({ enableHotkeys: e.target.checked })}
+          />
+          <span className="text-sm">Enable hotkeys (Alt+T translate, Alt+S summary)</span>
+        </label>
+
+        <label className="block">
+          <span className="text-sm">Tweet button color</span>
+          <div className="flex gap-2 mt-1">
+            <input
+              type="color"
+              className="h-8 w-12 border rounded dark:bg-zinc-800 cursor-pointer"
+              value={settings.tweetButtonColor}
+              onChange={(e) => update({ tweetButtonColor: e.target.value })}
+            />
+            <input
+              type="text"
+              className="flex-1 border rounded p-1 dark:bg-zinc-800 font-mono text-sm"
+              value={settings.tweetButtonColor}
+              onChange={(e) => update({ tweetButtonColor: e.target.value })}
+            />
+          </div>
+        </label>
+
         {!settings.userApiKey && (
           <div className="text-sm text-zinc-500">
             Free quota today: {quota} / 50 used
           </div>
         )}
 
-        <div className="flex gap-2">
-          <button
-            className="flex-1 border rounded py-1 dark:bg-zinc-800"
-            onClick={() => update({ theme: dark ? 'light' : 'dark' })}
+        <label className="block">
+          <span className="text-sm">Theme</span>
+          <select
+            className="w-full mt-1 border rounded p-1 dark:bg-zinc-800"
+            value={settings.theme}
+            onChange={(e) => update({ theme: e.target.value as Settings['theme'] })}
           >
-            {dark ? 'Light' : 'Dark'}
-          </button>
-        </div>
+            <option value="auto">Auto (system)</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
       </div>
     </div>
   );

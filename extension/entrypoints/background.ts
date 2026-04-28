@@ -1,6 +1,7 @@
 import { handleProcess } from '~/lib/background-handler';
 import { isProcessRequest } from '~/lib/messages';
 import type { StorageAdapter } from '~/lib/cache';
+import { getSettings } from '~/lib/storage';
 
 const storeAdapter: StorageAdapter = {
   get: (keys) => chrome.storage.local.get(keys) as Promise<Record<string, unknown>>,
@@ -39,6 +40,12 @@ export default defineBackground(() => {
   });
 
   chrome.commands.onCommand.addListener(async (cmd) => {
+    // Hotkeys are off by default and only fire when the user has explicitly
+    // enabled them in settings. We can't dynamically unregister chrome.commands,
+    // so we just gate the dispatch here.
+    const settings = await getSettings();
+    if (!settings.enableHotkeys) return;
+
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return;
     const mode = cmd === 'translate-selection' ? 'translate' : 'summarize';
