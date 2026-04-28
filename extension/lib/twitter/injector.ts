@@ -5,7 +5,7 @@ import { TWEET_SELECTORS } from './selectors';
 const FLAG = 'data-bcb-injected';
 const BTN_CLASS = 'bcb-tweet-btn';
 const BTN_STYLE =
-  'margin-top:6px; padding:4px 8px; border:1px solid #ccc; border-radius:6px; background:transparent; cursor:pointer; font-size:13px;';
+  'margin-bottom:6px; padding:4px 8px; border:1px solid #ccc; border-radius:6px; background:transparent; cursor:pointer; font-size:13px;';
 const SCAN_DEBOUNCE_MS = 200;
 
 type OnClick = (text: string, anchor: HTMLElement) => void;
@@ -48,7 +48,7 @@ async function runScan(onClick: OnClick): Promise<void> {
       e.stopPropagation();
       onClick(text, btn);
     });
-    t.insertAdjacentElement('afterend', btn);
+    t.insertAdjacentElement('beforebegin', btn);
   }
 }
 
