@@ -10,6 +10,26 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_idle',
   main() {
+    // If chrome.scripting.executeScript re-injected this script into a tab
+    // that already has a previous instance running (which happens after
+    // every extension reload), tear down the old instance first. Without
+    // this, both old and new addEventListener registrations stay alive
+    // and we end up with TWO floating bars / TWO popups for one action.
+    type Win = typeof window & { __bcb_translator_cleanup__?: () => void };
+    const w = window as Win;
+    if (typeof w.__bcb_translator_cleanup__ === 'function') {
+      try {
+        w.__bcb_translator_cleanup__();
+      } catch {
+        // Old instance's chrome.runtime is detached; some teardowns may
+        // throw — ignore and continue with a clean slate.
+      }
+    }
+    // Every addEventListener / addListener / observer in this script pushes
+    // its undo here. The chain is invoked atomically by the cleanup hook on
+    // the next re-injection.
+    const cleanups: Array<() => void> = [];
+
     let mount: ShadowMount | null = null;
     // Tagged so selectionchange-cleared can dismiss only the floating bar,
     // never the result popup (the user may want to keep reading the result
@@ -24,15 +44,13 @@ export default defineContentScript({
     // keyboard-driven selections (Ctrl+A, Shift+Arrow), we fall back to
     // the end of the last visible line of the selection.
     const lastMouseup = { x: 0, y: 0, t: 0 };
-    document.addEventListener(
-      'mouseup',
-      (e) => {
-        lastMouseup.x = e.clientX;
-        lastMouseup.y = e.clientY;
-        lastMouseup.t = Date.now();
-      },
-      true,
-    );
+    const mouseupHandler = (e: MouseEvent) => {
+      lastMouseup.x = e.clientX;
+      lastMouseup.y = e.clientY;
+      lastMouseup.t = Date.now();
+    };
+    document.addEventListener('mouseup', mouseupHandler, true);
+    cleanups.push(() => document.removeEventListener('mouseup', mouseupHandler, true));
 
     // Approximate width of the two-button floating bar (.bcb-floating-bar).
     // Used to clamp X so the bar doesn't push past the viewport's right edge.
@@ -98,8 +116,7 @@ export default defineContentScript({
     const unsubAccent = onSettingsChange((s) => {
       accentColor = s.tweetButtonColor;
     });
-    // Detach on hot-reload of the content script (defensive).
-    window.addEventListener('beforeunload', () => unsubAccent(), { once: true });
+    cleanups.push(unsubAccent);
 
     // Decide where to anchor the floating bar (in viewport coordinates).
     // Priority:
@@ -199,7 +216,7 @@ export default defineContentScript({
       attachDismiss(next);
     };
 
-    watchSelection((sel) => {
+    const unwatchSelection = watchSelection((sel) => {
       if (!sel) {
         // Selection went away (typed over, deleted, clicked elsewhere). Drop
         // any pending mount AND close the floating bar if it's the visible
@@ -218,8 +235,9 @@ export default defineContentScript({
         showButton(sel.text, sel.rect);
       }, SELECTION_DEBOUNCE_MS);
     });
+    cleanups.push(unwatchSelection);
 
-    chrome.runtime.onMessage.addListener((msg) => {
+    const onMessageHandler = (msg: unknown) => {
       if (!msg || typeof msg !== 'object') return;
       const m = msg as { type?: string; mode?: Mode; text?: string };
       if (m.type !== 'trigger-action') return;
@@ -235,13 +253,21 @@ export default defineContentScript({
       // is gone), and even when it's there it can be off-screen if the user
       // scrolled — both cases used to drop the popup somewhere invisible.
       showPopup(text, viewportCenterPosition(), m.mode);
+    };
+    chrome.runtime.onMessage.addListener(onMessageHandler);
+    cleanups.push(() => {
+      try {
+        chrome.runtime.onMessage.removeListener(onMessageHandler);
+      } catch {
+        // chrome.runtime may already be invalidated on a detached old instance.
+      }
     });
 
     // X.com / twitter.com: inject inline "Translate / Summary" button
     // under foreign-language tweets. Hostname guard matches x.com, twitter.com
     // and any subdomain (e.g. mobile.x.com).
     if (/(?:^|\.)(?:x\.com|twitter\.com)$/.test(location.hostname)) {
-      startTweetInjector((text, tweetTextEl, mode) => {
+      const unwatchTweets = startTweetInjector((text, tweetTextEl, mode) => {
         // Mix two rects: take horizontal extent from the whole article so the
         // popup lands BESIDE the tweet (not inside it), but take the vertical
         // start from the tweet text itself so the popup aligns with the
@@ -254,6 +280,23 @@ export default defineContentScript({
         const rect = new DOMRect(aRect.left, tRect.top, aRect.width, aRect.height);
         showPopup(text, rect, mode);
       });
+      cleanups.push(unwatchTweets);
     }
+
+    // Always close any visible mount last during cleanup so listeners don't
+    // outlive their owning shadow root.
+    cleanups.push(() => closeMount());
+
+    // Register the cleanup hook so the NEXT instance (after another
+    // chrome.scripting.executeScript) can tear us down cleanly.
+    w.__bcb_translator_cleanup__ = () => {
+      for (const fn of cleanups) {
+        try {
+          fn();
+        } catch {
+          /* swallow per-step errors */
+        }
+      }
+    };
   },
 });
