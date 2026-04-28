@@ -2,6 +2,7 @@ import { ActionPopup } from '~/components/ActionPopup';
 import { FloatingButton } from '~/components/FloatingButton';
 import { mountShadow, type ShadowMount } from '~/lib/shadow-host';
 import { watchSelection } from '~/lib/selection-watcher';
+import { startTweetInjector } from '~/lib/twitter/injector';
 import type { Mode } from '~/lib/messages';
 
 export default defineContentScript({
@@ -94,5 +95,15 @@ export default defineContentScript({
 
       showPopup(text, viewportRect, m.mode);
     });
+
+    // X.com / twitter.com: inject inline "Translate / Summary" button
+    // under foreign-language tweets. Hostname guard matches x.com, twitter.com
+    // and any subdomain (e.g. mobile.x.com).
+    if (/(?:^|\.)(?:x\.com|twitter\.com)$/.test(location.hostname)) {
+      startTweetInjector((text, anchor) => {
+        const rect = anchor.getBoundingClientRect();
+        showPopup(text, rect);
+      });
+    }
   },
 });
