@@ -39,18 +39,42 @@ export default defineContentScript({
     let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
     let pendingShow: number | null = null;
 
-    // Track the last mouseup position to anchor the floating bar there.
-    // For mouse-driven selections, this matches the user's eyes; for
-    // keyboard-driven selections (Ctrl+A, Shift+Arrow), we fall back to
-    // the end of the last visible line of the selection.
+    // Track the last mouseup position so the bar appears near the user's
+    // eyes for mouse selections, and a "drag in progress" flag so we never
+    // mount the bar while the user is still extending the selection — that
+    // used to put the bar in the cursor's path and break the drag.
     const lastMouseup = { x: 0, y: 0, t: 0 };
+    let dragInProgress = false;
+
+    const mousedownHandler = (e: MouseEvent) => {
+      if (e.button === 0) dragInProgress = true;
+    };
     const mouseupHandler = (e: MouseEvent) => {
       lastMouseup.x = e.clientX;
       lastMouseup.y = e.clientY;
       lastMouseup.t = Date.now();
+      if (!dragInProgress) return;
+      dragInProgress = false;
+      // Mouse-driven selection has just been finalised. Show the bar after a
+      // tiny delay so the user's cursor naturally moves away from the
+      // mouseup point first.
+      cancelPendingShow();
+      pendingShow = window.setTimeout(() => {
+        pendingShow = null;
+        const live = document.getSelection();
+        if (!live || live.rangeCount === 0 || live.isCollapsed) return;
+        const text = live.toString();
+        if (text.trim().length < 3) return;
+        const rect = live.getRangeAt(0).getBoundingClientRect();
+        showButton(text, rect);
+      }, 120);
     };
+    document.addEventListener('mousedown', mousedownHandler, true);
     document.addEventListener('mouseup', mouseupHandler, true);
-    cleanups.push(() => document.removeEventListener('mouseup', mouseupHandler, true));
+    cleanups.push(() => {
+      document.removeEventListener('mousedown', mousedownHandler, true);
+      document.removeEventListener('mouseup', mouseupHandler, true);
+    });
 
     // Approximate width of the two-button floating bar (.bcb-floating-bar).
     // Used to clamp X so the bar doesn't push past the viewport's right edge.
@@ -128,7 +152,10 @@ export default defineContentScript({
     const computeBarAnchor = (sel: { rect: DOMRect }): { x: number; y: number } => {
       const recent = Date.now() - lastMouseup.t < 800;
       if (recent) {
-        return { x: lastMouseup.x + 8, y: lastMouseup.y + 8 };
+        // Sit a bit further from the cursor (down + right) so a small
+        // post-release mouse jiggle doesn't drift onto the bar and break
+        // selection extension.
+        return { x: lastMouseup.x + 18, y: lastMouseup.y + 18 };
       }
       const live = document.getSelection();
       if (live && live.rangeCount > 0 && !live.isCollapsed) {
@@ -226,9 +253,14 @@ export default defineContentScript({
         if (mountKind === 'floating') closeMount();
         return;
       }
-      // Debounce: only mount the button after the user has stopped extending
-      // the selection for a moment. This single change kills the flicker
-      // caused by selectionchange firing on every pixel of mouse drag.
+      // While the user is actively dragging to extend the selection, never
+      // mount the bar. mouseup will trigger it once the drag is finished.
+      if (dragInProgress) {
+        cancelPendingShow();
+        return;
+      }
+      // Keyboard-driven selection (Ctrl+A, Shift+Arrow): no mouseup will
+      // fire, so debounce the selectionchange stream and mount when stable.
       cancelPendingShow();
       pendingShow = window.setTimeout(() => {
         pendingShow = null;

@@ -8,7 +8,11 @@ interface Props {
 }
 
 export function FloatingButton({ onTranslate, onSummary, color }: Props) {
-  const style = color ? { background: color } : undefined;
+  // Make the accent slightly translucent so the page reads through; the
+  // backdrop-filter blur in shadow.css then frosts whatever is behind us.
+  const style = color
+    ? { background: `color-mix(in srgb, ${color} 88%, transparent)` }
+    : undefined;
   return (
     <div
       className="bcb-floating-bar"

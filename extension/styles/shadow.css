@@ -12,17 +12,20 @@ button {
   cursor: pointer;
 }
 
-/* Selection floating bar — segmented control with a solid accent surface.
-   The bar's background is the user's chosen accent color (set inline by
-   content.tsx via style.background); text is always black so contrast is
-   readable on any host page. Soft shadow lifts it off the document. */
+/* Selection floating bar — segmented control on a frosted accent surface.
+   Background is the user's accent color at ~88% opacity (inlined by
+   content.tsx); the backdrop-filter blur frosts whatever shows through.
+   Text is always white so contrast is readable on any color and any
+   host page background. */
 .bcb-floating-bar {
   display: inline-flex;
-  color: #000;
-  background: rgba(160, 160, 160, 0.95); /* fallback if no inline color set */
+  color: #fff;
+  background: rgba(120, 120, 120, 0.85); /* fallback if no inline color set */
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .bcb-floating-btn {
   padding: 4px 12px;
@@ -35,11 +38,11 @@ button {
   cursor: pointer;
 }
 .bcb-floating-btn + .bcb-floating-btn {
-  /* Translucent black divider works on any accent color the user picks. */
-  border-left: 1px solid rgba(0, 0, 0, 0.18);
+  /* Translucent white divider — visible on any accent the user picks. */
+  border-left: 1px solid rgba(255, 255, 255, 0.28);
 }
 .bcb-floating-btn:hover {
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .bcb-popup {
