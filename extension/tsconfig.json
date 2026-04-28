@@ -1,9 +1,10 @@
 {
-  "extends": "../tsconfig.base.json",
+  "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
-    "rootDir": ".",
-    "types": ["chrome", "vite/client"],
-    "paths": { "~/*": ["./*"] }
-  },
-  "include": ["entrypoints", "components", "lib", "tests"]
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["chrome"]
+  }
 }
