@@ -1,0 +1,11 @@
+name = "bcb-translater"
+main = "src/index.ts"
+compatibility_date = "2026-04-28"
+
+[[kv_namespaces]]
+binding = "QUOTA_KV"
+id = "TBD_AT_DEPLOY_TIME"
+
+# Secrets (set via `wrangler secret put`):
+# - GEMINI_API_KEY
+# - GROQ_API_KEY
