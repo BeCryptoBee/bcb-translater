@@ -7,8 +7,14 @@ const BTN_CLASS = 'bcb-tweet-btn';
 const SCAN_DEBOUNCE_MS = 200;
 
 function buildBtnStyle(color: string): string {
+  // X.com tweet bodies sit inside a flex-column whose children take 100% width
+  // by default, so display:inline-block is not enough — the button still
+  // stretches. Force its size to its content with width:fit-content, plus
+  // display:block so it sits on its own line above the tweet text.
   return [
-    'display:inline-block',
+    'display:block',
+    'width:fit-content',
+    'max-width:fit-content',
     'margin:4px 0 6px 0',
     'padding:2px 10px',
     'border:1px solid currentColor',

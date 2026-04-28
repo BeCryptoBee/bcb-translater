@@ -26,19 +26,28 @@ button {
 
 .bcb-popup {
   position: relative;
-  min-width: 280px;
+  display: flex;
+  flex-direction: column;
   width: 460px;
-  max-width: 92vw;
+  /* Resize is grow-only: the minimums equal the defaults, so dragging the
+     bottom-right corner only enlarges the popup, never shrinks below the
+     comfortable default. */
+  min-width: 460px;
+  min-height: 80px;
+  max-width: 96vw;
+  max-height: 92vh;
   background: white;
   border: 1px solid #e0e0e0;
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   overflow: hidden; /* clip header corners */
+  resize: both;
 }
 
 /* Header bar: holds the drag handle and the close button.
    Slim (28px) and acts as the only drag area for the popup. */
 .bcb-header {
+  flex: 0 0 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -78,7 +87,12 @@ button {
 }
 
 .bcb-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   padding: 12px 14px;
+  overflow: hidden;
 }
 
 .bcb-actions {
@@ -102,30 +116,37 @@ button {
 }
 
 .bcb-result {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 360px;
+}
+/* The text itself is the scrollable region; the toolbar below it stays put. */
+.bcb-result > pre {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
   overflow: auto;
   /* Custom thin scrollbar (Firefox) */
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
 }
 /* Custom thin scrollbar (WebKit / Chromium / Edge) */
-.bcb-result::-webkit-scrollbar {
+.bcb-result > pre::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-.bcb-result::-webkit-scrollbar-track {
+.bcb-result > pre::-webkit-scrollbar-track {
   background: transparent;
 }
-.bcb-result::-webkit-scrollbar-thumb {
+.bcb-result > pre::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.22);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
-.bcb-result::-webkit-scrollbar-thumb:hover {
+.bcb-result > pre::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.4);
   background-clip: content-box;
 }
@@ -136,6 +157,7 @@ button {
 }
 
 .bcb-toolbar {
+  flex: 0 0 auto;
   display: flex;
   gap: 6px;
   justify-content: flex-end;
@@ -199,14 +221,14 @@ button {
 :host([data-theme='dark']) .bcb-toolbar {
   border-top-color: #333;
 }
-:host([data-theme='dark']) .bcb-result {
+:host([data-theme='dark']) .bcb-result > pre {
   scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
 }
-:host([data-theme='dark']) .bcb-result::-webkit-scrollbar-thumb {
+:host([data-theme='dark']) .bcb-result > pre::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.22);
   background-clip: content-box;
 }
-:host([data-theme='dark']) .bcb-result::-webkit-scrollbar-thumb:hover {
+:host([data-theme='dark']) .bcb-result > pre::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.4);
   background-clip: content-box;
 }

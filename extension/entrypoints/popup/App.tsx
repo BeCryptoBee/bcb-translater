@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getSettings, setSettings, resolveTheme, type Settings } from '~/lib/storage';
 import { getLocalQuota } from '~/lib/quota';
 
@@ -14,20 +14,56 @@ const TARGET_LANGS = [
   { code: 'ja', name: 'Japanese' },
 ];
 
+// chrome.storage.sync rate-limits writes (~120/min, ~10/sec sustained), so a
+// rapid stream of updates (color picker drag, hex paste, etc.) gets some of
+// its writes silently dropped — the "winner" is then unpredictable. We batch
+// updates here: UI updates instantly, persistence happens on the trailing
+// edge of a 250ms idle window, and a flush runs when the popup unmounts.
+const SAVE_DEBOUNCE_MS = 250;
+
 export function App() {
   const [settings, setLocal] = useState<Settings | null>(null);
   const [quota, setQuota] = useState(0);
+  const pendingPatch = useRef<Partial<Settings>>({});
+  const saveTimer = useRef<number | null>(null);
+
+  const flushNow = () => {
+    if (saveTimer.current != null) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (Object.keys(pendingPatch.current).length === 0) return;
+    void setSettings(pendingPatch.current);
+    pendingPatch.current = {};
+  };
 
   useEffect(() => {
     getSettings().then(setLocal);
     getLocalQuota().then(setQuota);
+    // Flush pending writes when the popup is closing (visibilitychange fires
+    // before unmount in extension popups; also catch unmount itself).
+    const onHide = () => flushNow();
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+      flushNow();
+    };
   }, []);
 
   const update = (patch: Partial<Settings>) => {
     if (!settings) return;
     const next = { ...settings, ...patch };
     setLocal(next);
-    setSettings(patch);
+    pendingPatch.current = { ...pendingPatch.current, ...patch };
+    if (saveTimer.current != null) clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null;
+      if (Object.keys(pendingPatch.current).length === 0) return;
+      void setSettings(pendingPatch.current);
+      pendingPatch.current = {};
+    }, SAVE_DEBOUNCE_MS);
   };
 
   if (!settings) return null;

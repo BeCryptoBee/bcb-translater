@@ -81,6 +81,27 @@ export default defineContentScript({
       attachDismiss(next);
     };
 
+    // Popup default width — must match .bcb-popup width in shadow.css.
+    const POPUP_W = 460;
+    const POPUP_MARGIN = 12;
+
+    const computePopupPosition = (rect: DOMRect): { x: number; y: number } => {
+      // Prefer placing the popup to the RIGHT of the source rect — that way
+      // the user sees both the original text and the translation side by side.
+      // Fall back to BELOW the rect when there's not enough room on the right.
+      const spaceRight = window.innerWidth - rect.right;
+      if (spaceRight >= POPUP_W + POPUP_MARGIN) {
+        return {
+          x: rect.right + window.scrollX + POPUP_MARGIN,
+          y: rect.top + window.scrollY,
+        };
+      }
+      // Below the source. Clamp X so the popup doesn't run off the right edge.
+      const maxX = window.scrollX + window.innerWidth - POPUP_W - 8;
+      const x = Math.max(8, Math.min(rect.left + window.scrollX, maxX));
+      return { x, y: rect.bottom + window.scrollY + 8 };
+    };
+
     const showPopup = (text: string, rect: DOMRect, defaultMode?: Mode) => {
       closeMount();
       const next: ShadowMount = mountShadow(
@@ -89,7 +110,7 @@ export default defineContentScript({
           defaultMode={defaultMode}
           onClose={() => closeMount()}
         />,
-        { x: rect.left + window.scrollX, y: rect.bottom + window.scrollY + 8 },
+        computePopupPosition(rect),
       );
       mount = next;
       attachDismiss(next);
