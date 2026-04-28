@@ -12,31 +12,35 @@ button {
   cursor: pointer;
 }
 
-/* Selection floating bar — two pill buttons side by side. Clicking either
-   one runs the action immediately (no intermediate "choose" popup).
-   Pills use currentColor for their border AND a tinted background derived
-   from the same color via color-mix, so the bar reads as deliberate UI
-   rather than blending into the page. A soft drop-shadow lifts the bar
-   off light backgrounds without overpowering dark ones. */
+/* Selection floating bar — segmented-control style.
+   Single rounded container holds the two buttons, divided by a thin line.
+   Tints are derived from the user's accent color via color-mix, so the
+   bar feels coherent with the tweet button without screaming. */
 .bcb-floating-bar {
   display: inline-flex;
-  gap: 6px;
   color: #333;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.28));
+  border: 1px solid color-mix(in srgb, currentColor 38%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .bcb-floating-btn {
-  padding: 3px 12px;
-  border: 1px solid currentColor;
-  border-radius: 9999px;
-  background: color-mix(in srgb, currentColor 14%, transparent);
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
   font-size: 12px;
-  line-height: 18px;
+  line-height: 16px;
   font-weight: 500;
   color: inherit;
   cursor: pointer;
 }
+.bcb-floating-btn + .bcb-floating-btn {
+  border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+}
 .bcb-floating-btn:hover {
-  background: color-mix(in srgb, currentColor 26%, transparent);
+  background: color-mix(in srgb, currentColor 16%, transparent);
 }
 /* Dark fallback if no inline color was provided (rare). */
 :host([data-theme='dark']) .bcb-floating-bar {
