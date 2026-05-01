@@ -24,6 +24,18 @@ export type ProcessResponse =
       provider: 'gemini' | 'groq';
       remainingQuota?: number;
       cached?: boolean;
+      /**
+       * Sentence-aligned segments. Set ONLY when Translation Highlight is
+       * enabled and the segmented pipeline succeeded. Always set together
+       * with `separators` (length === segments.length).
+       */
+      segments?: Array<{ src: string; tgt: string }>;
+      /**
+       * Inter-segment whitespace from the source text. `separators[0]` is the
+       * leading text before segment 0 (usually ""); `separators[i]` for i>0
+       * is the text between segment i-1's end and segment i's start.
+       */
+      separators?: string[];
     }
   | { ok: false; code: ErrorCode; message: string };
 
