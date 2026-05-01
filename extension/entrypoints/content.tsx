@@ -275,6 +275,12 @@ export default defineContentScript({
         tweetEl?: HTMLElement;
       },
     ) => {
+      console.log('[BCB] showPopup called', {
+        textLen: text.length,
+        textHead: text.slice(0, 40),
+        defaultMode,
+        opts,
+      });
       closeMount();
       // Capture range BEFORE mounting; mounting steals focus and may
       // collapse the live selection.
@@ -319,16 +325,29 @@ export default defineContentScript({
           segments: Array<{ src: string; tgt: string }>;
         }>;
         segmentsForHighlight = evt.detail.segments;
+        console.log('[BCB] segments-ready', { count: segmentsForHighlight.length });
       };
 
       const onSegmentHover = (e: Event) => {
-        if (popupAborted) return;
+        if (popupAborted) {
+          console.log('[BCB] hover after popupAborted — ignored');
+          return;
+        }
         const evt = e as CustomEvent<{
           index: number;
           src: string;
           action: 'enter' | 'leave';
         }>;
         const { index, src, action } = evt.detail;
+        console.log('[BCB] hover', {
+          action,
+          index,
+          srcHead: src.slice(0, 40),
+          popupOrigin,
+          hasSavedRange: !!savedSelectionRange,
+          hasTweetEl: !!popupTweetEl,
+          hasSegments: !!segmentsForHighlight,
+        });
 
         if (popupOrigin === 'selection' && savedSelectionRange) {
           if (action === 'enter') setSelectionHighlight(savedSelectionRange, src);
@@ -344,7 +363,7 @@ export default defineContentScript({
           setActiveSegment(popupTweetEl, index, action === 'enter');
           return;
         }
-        // popupOrigin === 'command': no-op (no anchor to highlight)
+        console.log('[BCB] hover ignored — origin or anchor missing');
       };
 
       popupListenerCtl = new AbortController();

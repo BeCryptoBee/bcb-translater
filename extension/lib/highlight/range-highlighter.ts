@@ -73,15 +73,24 @@ export function installTweetSegmentStylesheet(accentColor: string): void {
  */
 export function setSelectionHighlight(savedRange: Range, segmentSrc: string): void {
   const reg = getHighlights();
-  if (!reg || typeof Highlight === 'undefined') return;
+  if (!reg || typeof Highlight === 'undefined') {
+    console.log('[BCB] setSelectionHighlight: no Highlight API', {
+      hasReg: !!reg,
+      hasHighlight: typeof Highlight !== 'undefined',
+    });
+    return;
+  }
   try {
-    // No normalize callback: buildProjection requires 1:1 length-preserving
-    // and normalizeForMatch is not (… → ...). The model is instructed to
-    // emit src verbatim from the input, so a raw substring search lands
-    // correctly in the page DOM as well.
     const proj = buildProjection(savedRange);
+    console.log('[BCB] setSelectionHighlight: projection built', {
+      projTextHead: proj.text.slice(0, 60),
+      projTextLen: proj.text.length,
+      mapEntries: proj.map.length,
+      needleHead: segmentSrc.slice(0, 40),
+    });
     const found = locateInProjection(proj, segmentSrc, 0);
     if (!found || found.covers.length === 0) {
+      console.log('[BCB] setSelectionHighlight: needle NOT found in projection');
       clearSelectionHighlight();
       return;
     }
@@ -92,7 +101,12 @@ export function setSelectionHighlight(savedRange: Range, segmentSrc: string): vo
     range.setStart(first.textNode, first.startOffset);
     range.setEnd(last.textNode, last.endOffset);
     reg.set(HL_NAME, new Highlight(range));
-  } catch {
+    console.log('[BCB] setSelectionHighlight: registered', {
+      coverCount: found.covers.length,
+      registrySize: typeof reg.has === 'function' ? reg.has(HL_NAME) : '?',
+    });
+  } catch (err) {
+    console.log('[BCB] setSelectionHighlight: threw', err);
     clearSelectionHighlight();
   }
 }

@@ -23,7 +23,10 @@ export function FloatingButton({ onTranslate, onSummary, color }: Props) {
       <button
         type="button"
         className="bcb-floating-btn"
-        onClick={onTranslate}
+        onClick={(e) => {
+          console.log('[BCB] FloatingButton T clicked', { defaultPrevented: e.defaultPrevented });
+          onTranslate();
+        }}
         aria-label="Translate selection"
         title="Translate"
       >
@@ -32,7 +35,10 @@ export function FloatingButton({ onTranslate, onSummary, color }: Props) {
       <button
         type="button"
         className="bcb-floating-btn"
-        onClick={onSummary}
+        onClick={(e) => {
+          console.log('[BCB] FloatingButton S clicked', { defaultPrevented: e.defaultPrevented });
+          onSummary();
+        }}
         aria-label="Summarize selection"
         title="Summary"
       >
