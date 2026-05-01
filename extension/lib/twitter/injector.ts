@@ -82,10 +82,15 @@ async function runScan(onClick: OnClick): Promise<void> {
     // @mentions as inline-block elements. innerText then inserts spurious
     // newlines around them — e.g. "AAVE on @Solana, more volume…" becomes
     // "AAVE on\n@Solana\n, more volume…". Collapse isolated single \n to
-    // a space; keep \n\n (real paragraph breaks) intact.
+    // a space — BUT only when the next character is regular prose. If the
+    // next character is a bullet/list/quote marker ("-", "*", "•", ">",
+    // "→"), it is a real list-item separator written by the author, NOT
+    // a Twitter rendering artifact, and we must keep it so the model
+    // segments each item into its own translation unit. Same for \n\n
+    // (paragraph breaks) — left intact.
     const raw = t.innerText.trim();
     const text = raw
-      .replace(/(?<!\n)\n(?!\n)/g, ' ')
+      .replace(/(?<!\n)\n(?![\n>\-*•→])/g, ' ')
       .replace(/[ \t]+/g, ' ');
     if (text.length < 5) continue;
 

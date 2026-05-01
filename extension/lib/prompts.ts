@@ -120,15 +120,15 @@ HARD RULES (in priority order):
 
 1. Each "src" MUST be a verbatim contiguous substring of the input — do NOT paraphrase, normalize, or trim "src".
 
-2. EVERY line that starts with "-", "*", "•", ">", "→", "—", or a digit followed by "." or ")" is its OWN segment. This holds even when there are many such lines in a row, even when individual lines are short data rows, and even when a line does not end in a period. NEVER merge two or more bullet / list / quote lines into a single segment, no matter how short they are.
+2. The line break is a HARD segment boundary. Each non-empty line in the input is its OWN segment. NEVER concatenate two or more lines into a single "src" — not when they share a common pattern ("Name = Value", "Date: thing"), not when they form a bullet/numbered/quote list, not when individual lines are short, not when a line does not end in a period. If you are about to put "\\n" inside a "src", STOP and split into separate segments instead.
 
-3. Outside bullet/list/quote regions, split the text into sentences. Each sentence is one segment.
+3. Within a single line that contains multiple full sentences (separated by ". " or "! " or "? "), split each sentence into its own segment.
 
 4. The concatenation of all "src" values in order, joined with the original whitespace that sits between matches, MUST exactly reconstruct the input.
 
-5. If a source segment maps to multiple target sentences (or vice versa), keep them in a SINGLE "tgt" so the array length stays 1-to-1 with source segments.
+5. If one source segment maps to multiple target sentences (or vice versa), keep them in a SINGLE "tgt" so the array length stays 1-to-1 with source segments.
 
-6. Translate "tgt" naturally and idiomatically, not word-by-word. Match register (casual / technical / formal). Preserve line breaks within "tgt" exactly as in the matching "src".
+6. Translate "tgt" naturally and idiomatically, not word-by-word. Match register (casual / technical / formal).
 
 7. Do NOT translate: @mentions, #hashtags, URLs, $TICKERS, code in \`backticks\`, emoji.
 
@@ -140,20 +140,24 @@ EXAMPLE (illustrative; do NOT echo back in your output):
 Input:
 > Jan 1 – Jan 31: $118B
 > Feb 1 – Feb 28: $76B
-- Mar 3: launch
-- Mar 5: update
 
-Correct segments array (4 items, one per line):
+Stats:
+Starknet = 22 wallets
+zkSync = 11 wallets
+
+Correct segments array (5 items — every non-empty line is its own segment):
 [
   {"src":"> Jan 1 – Jan 31: $118B","tgt":"> 1 січня – 31 січня: $118 млрд"},
   {"src":"> Feb 1 – Feb 28: $76B","tgt":"> 1 лютого – 28 лютого: $76 млрд"},
-  {"src":"- Mar 3: launch","tgt":"- 3 березня: запуск"},
-  {"src":"- Mar 5: update","tgt":"- 5 березня: оновлення"}
+  {"src":"Stats:","tgt":"Статистика:"},
+  {"src":"Starknet = 22 wallets","tgt":"Starknet = 22 гаманці"},
+  {"src":"zkSync = 11 wallets","tgt":"zkSync = 11 гаманців"}
 ]
 
-INCORRECT (do not do this — multiple bullet lines merged):
+INCORRECT (do not do this — multiple lines merged):
 [
-  {"src":"> Jan 1 – Jan 31: $118B\\n> Feb 1 – Feb 28: $76B\\n- Mar 3: launch\\n- Mar 5: update","tgt":"..."}
+  {"src":"> Jan 1 – Jan 31: $118B\\n> Feb 1 – Feb 28: $76B","tgt":"..."},
+  {"src":"Starknet = 22 wallets\\nzkSync = 11 wallets","tgt":"..."}
 ]`,
     user: text,
   };
