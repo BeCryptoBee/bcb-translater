@@ -589,7 +589,10 @@ describe('validateSegments', () => {
       { src: 'End.', tgt: 'Кінець.' },
     ], src);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.derivedFlat).toBe('Привіт. Світ. Кінець.');
+    if (r.ok) {
+      expect(r.derivedFlat).toBe('Привіт. Світ. Кінець.');
+      expect(r.separators).toEqual(['', ' ', ' ']);
+    }
   });
   it('typographic drift on src is tolerated', () => {
     const src = 'It’s “fine.” Right…';
@@ -646,8 +649,14 @@ export interface Segment {
 }
 
 export type ValidationResult =
-  | { ok: true; derivedFlat: string; segments: Segment[] }
+  | { ok: true; derivedFlat: string; segments: Segment[]; separators: string[] }
   | { ok: false; reason: string };
+
+// `separators` has length equal to segments.length:
+//   separators[0] = leading text in source BEFORE the first segment src match
+//                   (usually "" — source starts with src[0])
+//   separators[i] for i>0 = text in source between match-end of segment i-1
+//                           and match-start of segment i
 
 const SPACE_RE = /[   -     　]/g;
 const CURLY_DOUBLE_RE = /[“”„‟″‶]/g;
@@ -693,6 +702,7 @@ export function validateSegments(
   let rawCursor = 0;
   let normCursor = 0;
   const parts: string[] = [];
+  const separators: string[] = [];
   for (let i = 0; i < cleaned.length; i++) {
     const normSrc = normalizeForMatch(cleaned[i].src);
     const matchAt = normSource.indexOf(normSrc, normCursor);
@@ -702,12 +712,14 @@ export function validateSegments(
     if (rawMatchStart === undefined || rawMatchEnd === undefined) {
       return { ok: false, reason: `index_map_${i}` };
     }
-    if (i > 0) parts.push(sourceText.slice(rawCursor, rawMatchStart));
+    const sep = sourceText.slice(rawCursor, rawMatchStart);
+    separators.push(sep);
+    if (i > 0) parts.push(sep);
     parts.push(cleaned[i].tgt);
     rawCursor = rawMatchEnd;
     normCursor = matchAt + normSrc.length;
   }
-  return { ok: true, derivedFlat: parts.join(''), segments: cleaned };
+  return { ok: true, derivedFlat: parts.join(''), segments: cleaned, separators };
 }
 
 /**
@@ -716,17 +728,21 @@ export function validateSegments(
  * normalized cursor (so callers can translate back). Single Unicode space
  * variants and curly quotes are 1->1; ellipsis (…) is 1->3 (one raw char
  * normalizes to three "..."), so the raw cursor advances 1 while the
- * normalized cursor advances 3.
+ * normalized cursor advances 3. We FILL EVERY normalized index (including
+ * positions inside a 1->3 expansion) so that any normalized match offset
+ * — even one that lands inside an ellipsis expansion in pathological
+ * cases — translates back to a defined raw position.
  */
 function buildIndexMap(raw: string): { normToRaw: number[] } {
-  // normToRaw[i] = raw position whose normalized expansion starts at i.
   const map: number[] = [];
   let normPos = 0;
   for (let i = 0; i < raw.length; i++) {
     const ch = raw[i];
-    map[normPos] = i;
-    if (ch === '…') normPos += 3;
-    else normPos += 1;
+    const expand = ch === '…' ? 3 : 1;
+    for (let k = 0; k < expand; k++) {
+      if (map[normPos + k] === undefined) map[normPos + k] = i;
+    }
+    normPos += expand;
   }
   map[normPos] = raw.length;
   return { normToRaw: map };
@@ -734,6 +750,20 @@ function buildIndexMap(raw: string): { normToRaw: number[] } {
 ```
 
 (NB: this implementation handles single-char->multi-char normalization only for ellipsis, which is the only multi-char expansion in `normalizeForMatch`. NFC composition can also change length, but extremely rarely for typical text — if a test exposes a real-world failure, extend `buildIndexMap`. For first cut, this is sufficient.)
+
+Add an additional test case for `validateSegments` with an ellipsis-containing source:
+
+```ts
+it('handles source containing ellipsis when src uses three dots', () => {
+  const src = 'Wait… What?';
+  const r = validateSegments([
+    { src: 'Wait...', tgt: 'Чекай...' },
+    { src: 'What?', tgt: 'Що?' },
+  ], src);
+  expect(r.ok).toBe(true);
+  if (r.ok) expect(r.derivedFlat).toBe('Чекай… Що?'); // raw separator preserved
+});
+```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1017,7 +1047,7 @@ git commit -m "feat(providers): add jsonMode for Gemini responseSchema + Groq js
 - Modify: `extension/lib/messages.ts`
 - Modify: `extension/lib/providers/proxy.ts`
 
-- [ ] **Step 1: Add `segments` to `ProcessResponse`**
+- [ ] **Step 1: Add `segments` and `separators` to `ProcessResponse`**
 
 ```ts
 export type ProcessResponse =
@@ -1028,11 +1058,14 @@ export type ProcessResponse =
       remainingQuota?: number;
       cached?: boolean;
       segments?: Array<{ src: string; tgt: string }>; // NEW
+      separators?: string[]; // NEW: length === segments.length; separators[0] usually ""
     }
   | { ok: false; code: ErrorCode; message: string };
 ```
 
-(`isProcessResponse` does not need to validate this strictly — it's optional and the consumer is internal.)
+`segments` and `separators` are always set together or both omitted. Surfacing `separators` instead of having the UI re-derive them via `indexOf` is critical: short or repeated `tgt` strings would otherwise lock onto the wrong position in `result`.
+
+(`isProcessResponse` does not need to validate these strictly — they're optional and the consumer is internal.)
 
 - [ ] **Step 2: Update `ProxyInput` and `ProxyResult`**
 
@@ -1052,6 +1085,7 @@ export interface ProxyResult {
   provider: 'gemini' | 'groq';
   remainingQuota: number;
   segments?: Array<{ src: string; tgt: string }>; // NEW
+  separators?: string[]; // NEW
 }
 ```
 
@@ -1075,16 +1109,20 @@ const body = json as {
 };
 // ... existing checks ...
 let segments: Array<{ src: string; tgt: string }> | undefined;
+let separators: string[] | undefined;
 if (body.segments !== undefined) {
   if (!Array.isArray(body.segments)) throw { kind: 'malformed' };
-  // Lightweight shape check — full validation already happened server-side.
   segments = body.segments as Array<{ src: string; tgt: string }>;
+  if (Array.isArray((body as { separators?: unknown }).separators)) {
+    separators = (body as { separators: string[] }).separators;
+  }
 }
 return {
   text: body.result,
   provider: body.provider,
   remainingQuota: body.remainingQuota,
   segments,
+  separators,
 };
 ```
 
@@ -1222,6 +1260,7 @@ When the call returns and `segmented === true`, parse + validate:
 
 ```ts
 let segments: Array<{ src: string; tgt: string }> | undefined;
+let separators: string[] | undefined;
 if (segmented && settings.userApiKey) {
   let parsed: unknown;
   try { parsed = JSON.parse(result); } catch { parsed = null; }
@@ -1230,6 +1269,7 @@ if (segmented && settings.userApiKey) {
     : { ok: false as const, reason: 'parse_failed' };
   if (v.ok) {
     segments = v.segments;
+    separators = v.separators;
     result = v.derivedFlat;
   } else {
     // Retry once with flat prompt, no JSON mode.
@@ -1240,6 +1280,7 @@ if (segmented && settings.userApiKey) {
     result = r2.text;
     provider = r2.provider;
     segments = undefined;
+    separators = undefined;
   }
 }
 ```
@@ -1255,7 +1296,7 @@ if (req.mode === 'translate' && segments === undefined) {
 Update the success return:
 
 ```ts
-return { ok: true, result, provider, remainingQuota, segments };
+return { ok: true, result, provider, remainingQuota, segments, separators };
 ```
 
 Cache key uses the `segmented` flag:
@@ -1360,6 +1401,7 @@ try {
       return json(200, {
         result: v.derivedFlat,
         segments: v.segments,
+        separators: v.separators,
         provider: r.provider,
         remainingQuota: q.remaining,
       });
@@ -1445,6 +1487,7 @@ provider = r.provider;
 remainingQuota = r.remainingQuota;
 if (segmented && r.segments) {
   segments = r.segments;
+  separators = r.separators;
 }
 ```
 
@@ -1473,23 +1516,40 @@ In [extension/components/ResultView.tsx:43-57](extension/components/ResultView.t
 
 ```tsx
 const segments = resp.ok ? resp.segments : undefined;
+const separators = resp.ok ? resp.separators : undefined;
+const rootRef = useRef<HTMLDivElement>(null);
+
+useEffect(() => {
+  if (!segments) return;
+  const root = rootRef.current?.getRootNode();
+  if (root instanceof ShadowRoot) {
+    root.host.dispatchEvent(new CustomEvent('bcb-segments-ready', {
+      bubbles: true, composed: true, detail: { segments },
+    }));
+  }
+}, [segments]);
 
 return (
-  <div className="bcb-result">
-    {segments ? (
+  <div className="bcb-result" ref={rootRef}>
+    {segments && separators ? (
       <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit' }}>
         {segments.map((seg, i) => (
-          <SegmentSpan key={i} index={i} src={seg.src} tgt={seg.tgt} prevTgtEnd={
-            // separator from source text already baked into derivedFlat;
-            // we render tgts back-to-back, separators come from the
-            // flat result split. Simpler: derive separators from
-            // resp.result by string-search.
-          } />
+          <Fragment key={i}>
+            {separators[i]}
+            <span
+              className="bcb-tgt-seg"
+              data-segment-index={i}
+              onMouseEnter={(e) => dispatchSegmentHover(e.currentTarget, i, seg.src, 'enter')}
+              onMouseLeave={(e) => dispatchSegmentHover(e.currentTarget, i, seg.src, 'leave')}
+            >
+              {seg.tgt}
+            </span>
+          </Fragment>
         ))}
       </pre>
     ) : (
       <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit' }}>
-        {resp.result}
+        {resp.ok ? resp.result : ''}
       </pre>
     )}
     {/* toolbar unchanged */}
@@ -1497,47 +1557,20 @@ return (
 );
 ```
 
-Actually, simpler approach: render each `tgt` as a span and reconstruct separators from `resp.result` by walking. Add helper inside the file:
+The separator-from-`indexOf` reconstruction is GONE. We render `separators[i]` then `<span>{seg.tgt}</span>` for each segment, in order. The worker/handler is the single source of truth for what the separator text is — short or repeated `tgt` strings can never lock onto the wrong position.
+
+Helpers (file-local):
 
 ```tsx
-function renderSegmentSpans(
-  flatResult: string,
-  segments: Array<{ src: string; tgt: string }>,
-): React.ReactNode[] {
-  const out: React.ReactNode[] = [];
-  let cursor = 0;
-  for (let i = 0; i < segments.length; i++) {
-    const tgt = segments[i].tgt;
-    const at = flatResult.indexOf(tgt, cursor);
-    if (at === -1) {
-      // shouldn't happen — flatResult was derived from these tgts.
-      // Bail to flat rendering.
-      return [flatResult];
-    }
-    if (at > cursor) out.push(flatResult.slice(cursor, at));
-    out.push(
-      <span
-        key={i}
-        className="bcb-tgt-seg"
-        data-segment-index={i}
-        onMouseEnter={(e) => dispatchSegmentHover(e.currentTarget, i, segments[i].src, 'enter')}
-        onMouseLeave={(e) => dispatchSegmentHover(e.currentTarget, i, segments[i].src, 'leave')}
-      >
-        {tgt}
-      </span>,
-    );
-    cursor = at + tgt.length;
-  }
-  if (cursor < flatResult.length) out.push(flatResult.slice(cursor));
-  return out;
-}
+import { Fragment, useEffect, useRef } from 'react';
 
 function dispatchSegmentHover(
-  el: HTMLElement,
+  el: EventTarget,
   index: number,
   src: string,
   action: 'enter' | 'leave',
 ): void {
+  if (!(el instanceof Element)) return;
   const root = el.getRootNode();
   if (root instanceof ShadowRoot) {
     root.host.dispatchEvent(new CustomEvent('bcb-segment-hover', {
@@ -1548,6 +1581,8 @@ function dispatchSegmentHover(
   }
 }
 ```
+
+Edge case: `segments` is set but `separators` is missing (e.g. cache hit before this rev shipped, or worker version mismatch). The `segments && separators` guard falls back to flat rendering — safe.
 
 - [ ] **Step 2: Add CSS**
 
@@ -1638,10 +1673,56 @@ const showPopup = (
 
 - [ ] **Step 2: Wire origins at all call sites**
 
-- Floating bar (`showButton` -> `onTranslate`): `{ smartDirection: true, origin: 'selection' }`
-- Floating bar (`onSummary`): `{ origin: 'selection' }`
-- Tweet injector callback (`startTweetInjector`): `{ origin: 'tweet', tweetEl: tweetTextEl }`
-- Hotkey/context menu (`onMessageHandler`): `{ origin: 'command' }`
+Apply each diff exactly. All four sites currently call `showPopup(...)` — each gets a new `opts` argument.
+
+**(a) Floating bar — `showButton` (around content.tsx:182-188):**
+
+```tsx
+<FloatingButton
+  onTranslate={() => showPopup(text, rect, 'translate', { smartDirection: true, origin: 'selection' })}
+  onSummary={() => showPopup(text, rect, 'summarize', { origin: 'selection' })}
+  color={accentColor}
+/>
+```
+
+(Task 4 already added `smartDirection: true` for `onTranslate`; this step extends the same `opts` object with `origin`.)
+
+**(b) Tweet injector callback — `startTweetInjector` (around content.tsx:302-314):**
+
+The injector callback already receives `tweetTextEl` as its second argument. Pass it through:
+
+```ts
+const unwatchTweets = startTweetInjector((text, tweetTextEl, mode) => {
+  const article =
+    (tweetTextEl.closest('article[role="article"]') as HTMLElement | null) ??
+    (tweetTextEl.closest('article') as HTMLElement | null);
+  const aRect = (article ?? tweetTextEl).getBoundingClientRect();
+  const tRect = tweetTextEl.getBoundingClientRect();
+  const rect = new DOMRect(aRect.left, tRect.top, aRect.width, aRect.height);
+  showPopup(text, rect, mode, { origin: 'tweet', tweetEl: tweetTextEl });
+});
+```
+
+(No change needed to `injector.ts` signature — the callback already had `tweetTextEl`.)
+
+**(c) Hotkey / context-menu — `onMessageHandler` (around content.tsx:272-288):**
+
+```ts
+const onMessageHandler = (msg: unknown) => {
+  if (!msg || typeof msg !== 'object') return;
+  const m = msg as { type?: string; mode?: Mode; text?: string };
+  if (m.type !== 'trigger-action') return;
+  if (m.mode !== 'translate' && m.mode !== 'summarize') return;
+
+  const sel = document.getSelection();
+  const text = m.text ?? sel?.toString() ?? '';
+  if (!text) return;
+
+  showPopup(text, viewportCenterPosition(), m.mode, { origin: 'command' });
+};
+```
+
+That's all four invocation sites. `popupOrigin` is therefore always set when a popup mounts; only `null` while no popup is open.
 
 - [ ] **Step 3: Type-check + smoke**
 
@@ -2075,107 +2156,175 @@ git commit -m "feat(highlight): range-highlighter using CSS Custom Highlight API
 
 ---
 
-## Task 20: Wire highlighters in `content.tsx`
+## Task 20a: Capture `bcb-segments-ready` event + popup-scoped state
 
 **Files:**
 - Modify: `extension/entrypoints/content.tsx`
-- Modify: `extension/lib/twitter/injector.ts`
 
-- [ ] **Step 1: Install hover listener on shadow host when popup opens**
+The `bcb-segments-ready` CustomEvent emission was added to ResultView in Task 15 (its `useEffect`). This task installs the listener side and stashes the full segments list at popup scope, so subsequent hover events have access to all sentences (not just the one that triggered the hover).
 
-In `showPopup` after mounting:
+- [ ] **Step 1: Add per-popup state**
 
-```ts
-import { wrapTweetSegments, setActiveSegment, unwrapSegmentSpans } from '~/lib/highlight/tweet-wrapper';
-import {
-  installHighlightStylesheet, setSelectionHighlight, clearSelectionHighlight,
-} from '~/lib/highlight/range-highlighter';
-
-// Inside showPopup, after `mount = next; mountKind = 'popup';`:
-let tweetWrapped = false;
-const onHover = (e: Event) => {
-  if (popupAborted) return;
-  const evt = e as CustomEvent<{ index: number; src: string; action: 'enter' | 'leave' }>;
-  const { index, src, action } = evt.detail;
-  if (popupOrigin === 'tweet' && popupTweetEl) {
-    if (!tweetWrapped) {
-      // Need full segments list — we only get one src per event. Wrap on
-      // first hover by reading all segments from the popup DOM.
-      const segSpans = next.shadow.querySelectorAll<HTMLElement>('.bcb-tgt-seg');
-      const segs = Array.from(segSpans).map((s, i) => ({
-        src: '', // will be filled below by walking the dispatched events;
-                 // OR: store segments on the host as a data attr at render time.
-        tgt: s.textContent ?? '',
-      }));
-      // Simpler: pass full segments list via a custom event from ResultView
-      // on first render, and capture it here.
-      tweetWrapped = true;
-    }
-    setActiveSegment(popupTweetEl, index, action === 'enter');
-  } else if (popupOrigin === 'selection' && savedSelectionRange) {
-    if (action === 'enter') setSelectionHighlight(savedSelectionRange, src);
-    else clearSelectionHighlight();
-  }
-  // popupOrigin === 'command': no-op (no anchor)
-};
-next.host.addEventListener('bcb-segment-hover', onHover);
-```
-
-The "wrap on first hover but we only have one src" problem above resolves by emitting a separate one-shot event from ResultView when segments are first rendered:
-
-In `ResultView.tsx` (segmented branch), after rendering:
-
-```tsx
-useEffect(() => {
-  if (!segments) return;
-  const root = (rootRef.current?.getRootNode?.()) as ShadowRoot | undefined;
-  root?.host?.dispatchEvent(new CustomEvent('bcb-segments-ready', {
-    bubbles: true, composed: true, detail: { segments },
-  }));
-}, [segments]);
-```
-
-In `content.tsx`:
+Inside `showPopup`, before mounting:
 
 ```ts
 let segmentsForHighlight: Array<{ src: string; tgt: string }> | null = null;
+let tweetWrapped = false;
+```
+
+After `mount = next`, install listeners on the shadow host:
+
+```ts
+import { wrapTweetSegments, setActiveSegment } from '~/lib/highlight/tweet-wrapper';
+import {
+  installHighlightStylesheet, installTweetSegmentStylesheet,
+  setSelectionHighlight, clearSelectionHighlight,
+} from '~/lib/highlight/range-highlighter';
+
 const onSegmentsReady = (e: Event) => {
   const evt = e as CustomEvent<{ segments: Array<{ src: string; tgt: string }> }>;
   segmentsForHighlight = evt.detail.segments;
 };
 next.host.addEventListener('bcb-segments-ready', onSegmentsReady);
-
-// Then in onHover for tweet path:
-if (popupOrigin === 'tweet' && popupTweetEl && segmentsForHighlight) {
-  if (!tweetWrapped) {
-    wrapTweetSegments(popupTweetEl, segmentsForHighlight);
-    tweetWrapped = true;
-  }
-  setActiveSegment(popupTweetEl, index, action === 'enter');
-}
 ```
 
-- [ ] **Step 2: Install accent stylesheet on first selection-origin popup**
+Reset both `segmentsForHighlight` and `tweetWrapped` on `closeMount` (next task).
+
+- [ ] **Step 2: Type-check**
+
+Run: `pnpm -C extension exec tsc --noEmit`
+Expected: PASS.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add extension/entrypoints/content.tsx
+git commit -m "feat(content): listen for bcb-segments-ready, stash segments per popup"
+```
+
+---
+
+## Task 20b: Hover dispatch — selection origin (CSS Custom Highlight)
+
+**Files:**
+- Modify: `extension/entrypoints/content.tsx`
+
+- [ ] **Step 1: Install hover handler for selection origin**
+
+In `showPopup`, immediately after the `onSegmentsReady` listener install, also install:
 
 ```ts
-if (popupOrigin === 'selection' && savedSelectionRange) {
+const onHover = (e: Event) => {
+  if (popupAborted) return;
+  const evt = e as CustomEvent<{ index: number; src: string; action: 'enter' | 'leave' }>;
+  const { src, action } = evt.detail;
+
+  if (popupOrigin === 'selection' && savedSelectionRange) {
+    if (action === 'enter') setSelectionHighlight(savedSelectionRange, src);
+    else clearSelectionHighlight();
+    return;
+  }
+  // tweet path is wired in Task 20c; command path intentionally no-ops.
+};
+next.host.addEventListener('bcb-segment-hover', onHover);
+```
+
+- [ ] **Step 2: Install the page-document `::highlight()` stylesheet exactly once per popup with selection origin**
+
+Right before `mount = next`, when `popupOrigin === 'selection'`:
+
+```ts
+if (popupOrigin === 'selection') {
   installHighlightStylesheet(accentColor);
 }
 ```
 
 - [ ] **Step 3: Cleanup on close**
 
-In `closeMount`:
+In `closeMount`, before `mount.unmount()`:
 
 ```ts
 clearSelectionHighlight();
-if (popupTweetEl) {
-  setActiveSegment(popupTweetEl, -1, false); // no-op selector match
-  // Don't unwrap on close — leave spans in place; they're invisible without --active.
+```
+
+- [ ] **Step 4: Manual smoke**
+
+Run: `pnpm -C extension dev`. Toggle Translation Highlight ON. Open Wikipedia (or any article), select a 4-paragraph block, click T. Hover translated sentences — verify yellow tint appears on matching source under the page text. Close popup → tint disappears immediately.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add extension/entrypoints/content.tsx
+git commit -m "feat(content): selection-origin hover dispatches CSS Custom Highlight"
+```
+
+---
+
+## Task 20c: Hover dispatch — tweet origin (TreeWalker wrap)
+
+**Files:**
+- Modify: `extension/entrypoints/content.tsx`
+
+- [ ] **Step 1: Extend `onHover` with the tweet branch**
+
+Replace the comment "tweet path is wired in Task 20c" with:
+
+```ts
+if (popupOrigin === 'tweet' && popupTweetEl && segmentsForHighlight) {
+  if (!tweetWrapped) {
+    installTweetSegmentStylesheet(accentColor);
+    wrapTweetSegments(popupTweetEl, segmentsForHighlight);
+    tweetWrapped = true;
+  }
+  setActiveSegment(popupTweetEl, evt.detail.index, action === 'enter');
+  return;
 }
 ```
 
-- [ ] **Step 4: Hook `unwrapSegmentSpans` into `injector.cleanupAllButtons`**
+- [ ] **Step 2: Cleanup on close**
+
+In `closeMount`, after `clearSelectionHighlight()`:
+
+```ts
+if (popupTweetEl) {
+  // Remove --active class from any wrapped span. Leave spans in place;
+  // they're invisible without the active class and X may re-render the
+  // tweet container anyway. unwrapSegmentSpans runs from the injector's
+  // cleanupAllButtons on settings rescan (Task 20d).
+  popupTweetEl.querySelectorAll('.bcb-src-seg--active').forEach((el) => {
+    el.classList.remove('bcb-src-seg--active');
+  });
+}
+```
+
+Also reset popup-scoped flags here:
+
+```ts
+segmentsForHighlight = null; // captured in showPopup closure scope — see Task 20a
+tweetWrapped = false;
+```
+
+(Hoist the `let` declarations to module scope or reset via a small helper — the cleanest approach is to make `showPopup`'s closure also handle close-time reset by passing in a `resetHighlightState` function. Implementer's choice; keep it readable.)
+
+- [ ] **Step 3: Manual smoke**
+
+Run: `pnpm -C extension dev`. On X.com find a non-target-language tweet with 3+ sentences. Click the inline "Translate" button. Hover sentences in popup → verify the matching sentence in the tweet itself gets a yellow background highlight. Close popup → highlight disappears.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add extension/entrypoints/content.tsx
+git commit -m "feat(content): tweet-origin hover wraps + toggles per-segment spans"
+```
+
+---
+
+## Task 20d: Hook `unwrapSegmentSpans` into `cleanupAllButtons`
+
+**Files:**
+- Modify: `extension/lib/twitter/injector.ts`
+
+- [ ] **Step 1: Import + extend cleanup**
 
 In [injector.ts:40-47](extension/lib/twitter/injector.ts#L40-L47):
 
@@ -2193,13 +2342,36 @@ function cleanupAllButtons(): void {
 }
 ```
 
-- [ ] **Step 5: Add inline tweet-side CSS**
+- [ ] **Step 2: Type-check**
 
-The `.bcb-src-seg--active` class lives in the page DOM (NOT in shadow), so the rule must go on `document`. Inject from content.tsx alongside the `installHighlightStylesheet` call. Extend that helper or add a sibling:
+Run: `pnpm -C extension exec tsc --noEmit`
+Expected: PASS.
+
+- [ ] **Step 3: Manual smoke**
+
+In dev mode, hover-wrap a tweet, then change `tweetButtonColor` in popup settings (forces a rescan via `onSettingsChange`). Verify that the previously-wrapped tweet has no leftover `bcb-src-seg` spans afterwards (DevTools inspect).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add extension/lib/twitter/injector.ts
+git commit -m "fix(injector): unwrap segment spans during settings rescan cleanup"
+```
+
+---
+
+## Task 20e: `installTweetSegmentStylesheet` helper
+
+**Files:**
+- Modify: `extension/lib/highlight/range-highlighter.ts`
+
+- [ ] **Step 1: Add helper**
+
+The `.bcb-src-seg--active` class lives in the page DOM (NOT in shadow), so the rule must go on `document`. Add to `extension/lib/highlight/range-highlighter.ts` (same file as `installHighlightStylesheet` for cohesion — both manage page-document stylesheets):
 
 ```ts
-// in range-highlighter.ts or a new tiny `tweet-style.ts`:
 const TWEET_STYLE_ID = 'bcb-tweet-seg-style';
+
 export function installTweetSegmentStylesheet(accentColor: string): void {
   if (document.getElementById(TWEET_STYLE_ID)) return;
   const style = document.createElement('style');
@@ -2214,23 +2386,16 @@ export function installTweetSegmentStylesheet(accentColor: string): void {
 }
 ```
 
-Call it from content.tsx when origin is tweet.
+- [ ] **Step 2: Type-check**
 
-- [ ] **Step 6: Type-check + manual smoke**
+Run: `pnpm -C extension exec tsc --noEmit`
+Expected: PASS.
 
-Run: `pnpm -C extension exec tsc --noEmit && pnpm -C extension dev`. Then:
-
-1. Toggle Translation Highlight ON.
-2. Open X.com, find a non-target-language tweet with 3+ sentences. Click inline Translate. Hover sentences in popup → verify yellow tint on matching tweet text.
-3. Open Wikipedia, select a 4-paragraph block, click T (smart-direction will pick a target). Hover sentences in popup → verify yellow tint on matching source text under the page.
-4. Trigger via Alt+T (command origin) → verify popup spans hoverable but no source highlight, no errors in console.
-5. Toggle setting OFF, refresh, verify plain `<pre>` rendering returns and no spans/highlights linger.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add extension/entrypoints/content.tsx extension/lib/twitter/injector.ts extension/lib/highlight/range-highlighter.ts extension/components/ResultView.tsx
-git commit -m "feat(content): wire tweet + selection highlighters by popupOrigin"
+git add extension/lib/highlight/range-highlighter.ts
+git commit -m "feat(highlight): installTweetSegmentStylesheet for page-document active span style"
 ```
 
 ---
@@ -2290,4 +2455,4 @@ If smoke surfaced fixes (CSS positioning, edge cases), commit them with `fix:` p
 
 ## Done
 
-When all 21 tasks are complete and the smoke checklist passes, the implementation matches the spec. Open a PR for review against `main`.
+When all tasks (1–19, 20a–20e, 21) are complete and the smoke checklist passes, the implementation matches the spec. Open a PR for review against `main`.
