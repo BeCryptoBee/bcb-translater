@@ -20,11 +20,11 @@ The existing inline-tweet `Translate / Summary` button keeps its current behavio
 
 - New `smartDirection: boolean` field on `ProcessRequest`. The floating bar `T` button sets it to `true`; all other entry points leave it `false` and behave as today.
 - New `Settings.translationHighlight: boolean` (default `false`), surfaced as a checkbox in the popup with copy that warns about the additional token cost (~10–15%).
-- Segmented translation pipeline (gated by `translationHighlight === true`): new `buildTranslateSegmentedPrompt` that asks the model to return a JSON array `[{ "src": "...", "tgt": "..." }, ...]` with 1-to-1 sentence mapping; provider calls forced into JSON mode (Gemini `responseSchema`, Groq `response_format: json_schema`).
+- Segmented translation pipeline (gated by `translationHighlight === true`): new `buildTranslateSegmentedPrompt` that asks the model to return a JSON array `[{ "src": "...", "tgt": "..." }, ...]` with 1-to-1 sentence mapping; provider calls forced into JSON mode (Gemini `responseSchema` + `responseMimeType: 'application/json'`, Groq `response_format: { type: 'json_object' }` with the schema embedded in the system prompt).
 - `ProcessResponse.segments?: Array<{ src: string; tgt: string }>`. When present, `ResultView` renders translated sentences as hoverable spans; when absent (default flat translation), it renders as today.
 - Cache-key bump: include a `seg=1` flag so segmented and flat results never alias.
 - Source-side highlight in the page:
-  - **Inline tweets**: one-time wrap of the tweet text node into per-sentence spans (TextNode walker + `Range.surroundContents`); hover toggles a CSS class on the matching span.
+  - **Inline tweets**: one-time wrap of the tweet text nodes into per-sentence spans via TreeWalker + leaf-level `Node.splitText` (NOT `Range.surroundContents`, which throws on Ranges crossing inline elements like `@mentions` / hashtags / URL chips); hover toggles a CSS class on the matching span(s).
   - **Arbitrary selections**: persist the selection `Range` while the result popup is open; on hover, build a sub-Range for the matching source sentence and add it to a `CSS.highlights` registry (CSS Custom Highlight API). No DOM modification of the page.
 
 ### Out of scope (not in this spec)
