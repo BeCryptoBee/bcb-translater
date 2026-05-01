@@ -1,5 +1,4 @@
 import { buildProjection, locateInProjection } from './projection';
-import { normalizeForMatch } from '../segments-validate';
 
 const HL_NAME = 'bcb-translation-hl';
 const ACCENT_VAR = '--bcb-hl-accent';
@@ -76,7 +75,11 @@ export function setSelectionHighlight(savedRange: Range, segmentSrc: string): vo
   const reg = getHighlights();
   if (!reg || typeof Highlight === 'undefined') return;
   try {
-    const proj = buildProjection(savedRange, normalizeForMatch);
+    // No normalize callback: buildProjection requires 1:1 length-preserving
+    // and normalizeForMatch is not (… → ...). The model is instructed to
+    // emit src verbatim from the input, so a raw substring search lands
+    // correctly in the page DOM as well.
+    const proj = buildProjection(savedRange);
     const found = locateInProjection(proj, segmentSrc, 0);
     if (!found || found.covers.length === 0) {
       clearSelectionHighlight();
