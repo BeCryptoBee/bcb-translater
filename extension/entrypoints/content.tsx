@@ -5,6 +5,17 @@ import { watchSelection } from '~/lib/selection-watcher';
 import { startTweetInjector } from '~/lib/twitter/injector';
 import { getSettings, onSettingsChange } from '~/lib/storage';
 import type { Mode } from '~/lib/messages';
+import {
+  wrapTweetSegments,
+  setActiveSegment,
+  clearAllActiveSegments,
+} from '~/lib/highlight/tweet-wrapper';
+import {
+  installHighlightStylesheet,
+  installTweetSegmentStylesheet,
+  setSelectionHighlight,
+  clearSelectionHighlight,
+} from '~/lib/highlight/range-highlighter';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -117,6 +128,10 @@ export default defineContentScript({
       // Mark aborted BEFORE unmounting so any in-flight hover dispatches
       // bail out instead of touching torn-down state.
       popupAborted = true;
+      // Clear any active source-side highlights synchronously so they
+      // don't outlive the popup that owned them.
+      clearSelectionHighlight();
+      if (popupTweetEl) clearAllActiveSegments(popupTweetEl);
       if (!mount) return;
       mount.unmount();
       mount = null;
@@ -279,6 +294,53 @@ export default defineContentScript({
       mount = next;
       mountKind = 'popup';
       attachDismiss(next);
+
+      // -- Translation Highlight wiring --
+      // Page-document stylesheets must live OUTSIDE the popup's shadow root.
+      // CSS Custom Highlight API is document-scoped; the tweet's --active
+      // class lives in the page DOM. Both helpers are idempotent.
+      if (popupOrigin === 'selection') installHighlightStylesheet(accentColor);
+      if (popupOrigin === 'tweet') installTweetSegmentStylesheet(accentColor);
+
+      // Per-popup state for the highlight handlers below.
+      let segmentsForHighlight: Array<{ src: string; tgt: string }> | null = null;
+      let tweetWrapped = false;
+
+      const onSegmentsReady = (e: Event) => {
+        const evt = e as CustomEvent<{
+          segments: Array<{ src: string; tgt: string }>;
+        }>;
+        segmentsForHighlight = evt.detail.segments;
+      };
+
+      const onSegmentHover = (e: Event) => {
+        if (popupAborted) return;
+        const evt = e as CustomEvent<{
+          index: number;
+          src: string;
+          action: 'enter' | 'leave';
+        }>;
+        const { index, src, action } = evt.detail;
+
+        if (popupOrigin === 'selection' && savedSelectionRange) {
+          if (action === 'enter') setSelectionHighlight(savedSelectionRange, src);
+          else clearSelectionHighlight();
+          return;
+        }
+
+        if (popupOrigin === 'tweet' && popupTweetEl && segmentsForHighlight) {
+          if (!tweetWrapped) {
+            wrapTweetSegments(popupTweetEl, segmentsForHighlight);
+            tweetWrapped = true;
+          }
+          setActiveSegment(popupTweetEl, index, action === 'enter');
+          return;
+        }
+        // popupOrigin === 'command': no-op (no anchor to highlight)
+      };
+
+      next.host.addEventListener('bcb-segments-ready', onSegmentsReady);
+      next.host.addEventListener('bcb-segment-hover', onSegmentHover);
     };
 
     const unwatchSelection = watchSelection((sel) => {

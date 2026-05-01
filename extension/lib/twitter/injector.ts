@@ -1,6 +1,7 @@
 import { detectLanguage } from '~/lib/lang-detect';
 import { getSettings, onSettingsChange, type Settings } from '~/lib/storage';
 import type { Mode } from '~/lib/messages';
+import { unwrapSegmentSpans } from '~/lib/highlight/tweet-wrapper';
 import { TWEET_SELECTORS } from './selectors';
 
 const FLAG = 'data-bcb-injected';
@@ -43,7 +44,12 @@ function cleanupAllButtons(): void {
   const wraps = document.querySelectorAll<HTMLElement>(`.${WRAP_CLASS}`);
   wraps.forEach((w) => w.remove());
   const flagged = document.querySelectorAll<HTMLElement>(`[${FLAG}]`);
-  flagged.forEach((el) => el.removeAttribute(FLAG));
+  flagged.forEach((el) => {
+    el.removeAttribute(FLAG);
+    // Also unwrap any leftover Translation Highlight segment spans inside
+    // this tweet's text container so the next hover can wrap cleanly.
+    unwrapSegmentSpans(el);
+  });
 }
 
 // Routes where the tweets we'd see are tiny previews of someone else's
