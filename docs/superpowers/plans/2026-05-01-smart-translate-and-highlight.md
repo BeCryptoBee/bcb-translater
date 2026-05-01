@@ -761,7 +761,14 @@ it('handles source containing ellipsis when src uses three dots', () => {
     { src: 'What?', tgt: 'Що?' },
   ], src);
   expect(r.ok).toBe(true);
-  if (r.ok) expect(r.derivedFlat).toBe('Чекай… Що?'); // raw separator preserved
+  if (r.ok) {
+    // tgt content is verbatim (Чекай...), separator " " is sliced from raw
+    // source AFTER the ellipsis (which is part of the matched src, not the
+    // separator). The single-char ellipsis correctly maps to a normalized
+    // 3-char span via buildIndexMap.
+    expect(r.derivedFlat).toBe('Чекай... Що?');
+    expect(r.separators).toEqual(['', ' ']);
+  }
 });
 ```
 
