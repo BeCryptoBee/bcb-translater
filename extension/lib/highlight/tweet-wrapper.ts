@@ -1,5 +1,4 @@
 import { buildProjection, locateInProjection, type Cover } from './projection';
-import { normalizeForMatch } from '../segments-validate';
 
 const SEG_CLASS = 'bcb-src-seg';
 const ACTIVE_CLASS = 'bcb-src-seg--active';
@@ -7,16 +6,12 @@ const ACTIVE_CLASS = 'bcb-src-seg--active';
 /**
  * Tweet text is normalized by the injector before being sent to the LLM:
  * single \n (not bordered by \n) -> space, runs of whitespace collapsed.
- * We MUST replicate that normalization here so the segment src strings
- * (which match the normalized form) align against the live DOM text.
- *
- * NOTE: this is NOT length-preserving (whitespace collapse). We pass the
- * length-preserving subset (\n -> space) to the projection's normalize
- * callback; whitespace-collapse is handled by normalizeForMatch on both
- * sides of the indexOf comparison via locateInProjection.
+ * The whitespace-collapse step is NOT length-preserving and would violate
+ * the projection contract, so we apply ONLY the length-preserving
+ * \n -> space step here. In practice that's sufficient — X.com tweet
+ * rendering rarely produces internal whitespace runs.
  */
 function tweetProjectionNormalize(s: string): string {
-  // 1:1 length-preserving step: convert single \n to space.
   return s.replace(/(?<!\n)\n(?!\n)/g, ' ');
 }
 
@@ -24,27 +19,27 @@ export function wrapTweetSegments(
   root: HTMLElement,
   segments: Array<{ src: string; tgt: string }>,
 ): void {
-  // We must rebuild the projection AFTER each successful wrap because
-  // splitText invalidates the existing entries (textNode lengths change,
-  // siblings shift). Simpler and safe.
+  // We rebuild the projection AFTER each successful wrap because splitText
+  // invalidates the existing entries (textNode lengths change, siblings
+  // shift). Track the running projected-offset cursor so subsequent searches
+  // skip past already-wrapped territory — critical for short or repeated
+  // src strings that would otherwise re-locate to the same position.
+  let cursor = 0;
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     if (!seg) continue;
-    const proj = buildProjection(root, (s) =>
-      // Layer the per-textnode normalize on top of full match-normalization
-      // so the projection's text matches exactly what indexOf will compare
-      // against. (normalizeForMatch is also length-preserving for everything
-      // except ellipsis — sufficient for tweet text in practice.)
-      normalizeForMatch(tweetProjectionNormalize(s)),
-    );
-    // Already-wrapped spans from prior segments are still in the projection;
-    // skip past them by starting search from the previous match's end. We
-    // approximate that by finding the FIRST occurrence of seg.src that's
-    // inside an unwrapped Text node; if it's inside a span we already
-    // wrapped, accept it anyway (the toggle still works since we use the
-    // segment-index attribute).
-    const found = locateInProjection(proj, seg.src, 0);
-    if (!found) continue;
+    const proj = buildProjection(root, tweetProjectionNormalize);
+    const found = locateInProjection(proj, seg.src, cursor);
+    if (!found) {
+      // Not found from the current cursor — try once from 0 in case the
+      // wrap of an earlier segment shifted offsets unpredictably.
+      const retry = locateInProjection(proj, seg.src, 0);
+      if (!retry) continue;
+      cursor = retry.endProjected;
+      for (const cover of retry.covers) wrapCover(cover, i);
+      continue;
+    }
+    cursor = found.endProjected;
     for (const cover of found.covers) {
       wrapCover(cover, i);
     }

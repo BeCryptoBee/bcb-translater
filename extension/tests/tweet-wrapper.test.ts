@@ -49,6 +49,21 @@ describe('wrapTweetSegments', () => {
     expect(segIdx0.length).toBeGreaterThan(1);
   });
 
+  it('repeated identical src on multiple segments wraps each occurrence (no double-wrap)', () => {
+    const root = setup('Yes. No. Yes.');
+    wrapTweetSegments(root, [
+      { src: 'Yes.', tgt: 'Так.' },
+      { src: 'No.', tgt: 'Ні.' },
+      { src: 'Yes.', tgt: 'Так.' },
+    ]);
+    // Each segment index must wrap exactly one span (the right occurrence).
+    expect(root.querySelectorAll('[data-segment-index="0"]').length).toBe(1);
+    expect(root.querySelectorAll('[data-segment-index="1"]').length).toBe(1);
+    expect(root.querySelectorAll('[data-segment-index="2"]').length).toBe(1);
+    // textContent stays intact (no duplicated wrapping mangling).
+    expect(root.textContent).toBe('Yes. No. Yes.');
+  });
+
   it('unwrapSegmentSpans restores original text content', () => {
     const root = setup('Hi there.');
     const before = root.textContent;

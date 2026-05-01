@@ -55,6 +55,10 @@ export default defineContentScript({
     let popupAborted = false;
     let savedSelectionRange: Range | null = null;
     let popupTweetEl: HTMLElement | null = null;
+    // Per-popup AbortController used to remove all event listeners we attach
+    // to the popup's shadow host. Aborted in closeMount so the host (and the
+    // closures it captured) becomes GC-eligible immediately.
+    let popupListenerCtl: AbortController | null = null;
     let pointerDownHandler: ((e: PointerEvent) => void) | null = null;
     let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
     let pendingShow: number | null = null;
@@ -132,6 +136,10 @@ export default defineContentScript({
       // don't outlive the popup that owned them.
       clearSelectionHighlight();
       if (popupTweetEl) clearAllActiveSegments(popupTweetEl);
+      // Detach all listeners we attached to the popup's shadow host so the
+      // host and its captured closures become GC-eligible immediately.
+      popupListenerCtl?.abort();
+      popupListenerCtl = null;
       if (!mount) return;
       mount.unmount();
       mount = null;
@@ -339,8 +347,10 @@ export default defineContentScript({
         // popupOrigin === 'command': no-op (no anchor to highlight)
       };
 
-      next.host.addEventListener('bcb-segments-ready', onSegmentsReady);
-      next.host.addEventListener('bcb-segment-hover', onSegmentHover);
+      popupListenerCtl = new AbortController();
+      const sig = popupListenerCtl.signal;
+      next.host.addEventListener('bcb-segments-ready', onSegmentsReady, { signal: sig });
+      next.host.addEventListener('bcb-segment-hover', onSegmentHover, { signal: sig });
     };
 
     const unwatchSelection = watchSelection((sel) => {
