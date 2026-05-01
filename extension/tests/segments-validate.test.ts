@@ -55,8 +55,7 @@ describe('validateSegments', () => {
   });
 
   it('rejects non-string src/tgt', () => {
-    // @ts-expect-error testing runtime guard
-    expect(validateSegments([{ src: 123, tgt: 'y' }], 'x').ok).toBe(false);
+    expect(validateSegments([{ src: 123 as unknown as string, tgt: 'y' }], 'x').ok).toBe(false);
   });
 
   it('rejects out-of-order src', () => {

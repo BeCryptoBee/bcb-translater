@@ -192,6 +192,15 @@ button {
   border: 2px solid transparent;
   background-clip: content-box;
 }
+/* Translation Highlight: hoverable target sentences. Layout-neutral
+   styling (background-color only) so hover doesn't reflow the popup. */
+.bcb-tgt-seg {
+  border-radius: 2px;
+  transition: background-color 80ms ease-out;
+}
+.bcb-tgt-seg:hover {
+  background-color: rgba(250, 204, 21, 0.30);
+}
 .bcb-result > pre::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.4);
   background-clip: content-box;

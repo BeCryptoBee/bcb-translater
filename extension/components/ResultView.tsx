@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { Mode, ProcessResponse } from '~/lib/messages';
 
 interface Props {
@@ -7,12 +7,52 @@ interface Props {
   onSwitch: (m: Mode) => void;
 }
 
+function dispatchSegmentHover(
+  el: EventTarget,
+  index: number,
+  src: string,
+  action: 'enter' | 'leave',
+): void {
+  if (!(el instanceof Element)) return;
+  const root = el.getRootNode();
+  if (root instanceof ShadowRoot) {
+    root.host.dispatchEvent(
+      new CustomEvent('bcb-segment-hover', {
+        bubbles: true,
+        composed: true,
+        detail: { index, src, action },
+      }),
+    );
+  }
+}
+
 export function ResultView({ resp, currentMode, onSwitch }: Props) {
   const [copied, setCopied] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const segments = resp.ok ? resp.segments : undefined;
+  const separators = resp.ok ? resp.separators : undefined;
+
+  // Once segments are available, broadcast them to the content-script side
+  // (via the popup's shadow host) so it can wrap source-side spans on first
+  // hover and dispatch highlights.
+  useEffect(() => {
+    if (!segments) return;
+    const root = rootRef.current?.getRootNode();
+    if (root instanceof ShadowRoot) {
+      root.host.dispatchEvent(
+        new CustomEvent('bcb-segments-ready', {
+          bubbles: true,
+          composed: true,
+          detail: { segments },
+        }),
+      );
+    }
+  }, [segments]);
 
   if (!resp.ok) {
     return (
-      <div className="bcb-result">
+      <div className="bcb-result" ref={rootRef}>
         <div className="bcb-error">{resp.message}</div>
         <div className="bcb-toolbar">
           <button
@@ -40,10 +80,30 @@ export function ResultView({ resp, currentMode, onSwitch }: Props) {
     }
   };
 
+  const segmentedReady = segments && separators && segments.length === separators.length;
+
   return (
-    <div className="bcb-result">
+    <div className="bcb-result" ref={rootRef}>
       <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit' }}>
-        {resp.result}
+        {segmentedReady
+          ? segments!.map((seg, i) => (
+              <Fragment key={i}>
+                {separators![i]}
+                <span
+                  className="bcb-tgt-seg"
+                  data-segment-index={i}
+                  onMouseEnter={(e) =>
+                    dispatchSegmentHover(e.currentTarget, i, seg.src, 'enter')
+                  }
+                  onMouseLeave={(e) =>
+                    dispatchSegmentHover(e.currentTarget, i, seg.src, 'leave')
+                  }
+                >
+                  {seg.tgt}
+                </span>
+              </Fragment>
+            ))
+          : resp.result}
       </pre>
       <div className="bcb-toolbar">
         <button type="button" className="bcb-switch" onClick={() => onSwitch(otherMode)}>
