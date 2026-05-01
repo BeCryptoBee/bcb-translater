@@ -269,4 +269,51 @@ describe('handleProcess', () => {
     expect(r).toMatchObject({ ok: true, result: 'short summary' });
     expect(callWithFallbackMock).toHaveBeenCalledTimes(1);
   });
+
+  describe('smartDirection', () => {
+    // Use long enough text so franc-min returns a confident detection.
+    const ukText =
+      'Привіт, як ти сьогодні? Сподіваюся, у тебе все добре і робота йде як по маслу.';
+    const enText =
+      'Hello there, hope you are doing well today and the work is going smoothly for you.';
+
+    it('uk source -> en target overriding settings.targetLang', async () => {
+      stubChrome({ syncData: { userApiKey: 'k', provider: 'gemini', targetLang: 'uk' } });
+      const store = createMemoryStore();
+      callWithFallbackMock.mockResolvedValueOnce({ text: 'hello', provider: 'gemini' });
+
+      const r = await handleProcess(
+        { ...baseReq, text: ukText, smartDirection: true },
+        store,
+      );
+      expect(r.ok).toBe(true);
+      const call = callWithFallbackMock.mock.calls[0]!;
+      expect(call[1].system).toMatch(/English/);
+    });
+
+    it('non-uk source -> targetLang from settings', async () => {
+      stubChrome({ syncData: { userApiKey: 'k', provider: 'gemini', targetLang: 'uk' } });
+      const store = createMemoryStore();
+      callWithFallbackMock.mockResolvedValueOnce({ text: 'привіт', provider: 'gemini' });
+
+      const r = await handleProcess(
+        { ...baseReq, text: enText, smartDirection: true },
+        store,
+      );
+      expect(r.ok).toBe(true);
+      const call = callWithFallbackMock.mock.calls[0]!;
+      expect(call[1].system).toMatch(/Ukrainian/);
+    });
+
+    it('smartDirection false uses request targetLang as before', async () => {
+      stubChrome({ syncData: { userApiKey: 'k', provider: 'gemini', targetLang: 'uk' } });
+      const store = createMemoryStore();
+      callWithFallbackMock.mockResolvedValueOnce({ text: 'hello', provider: 'gemini' });
+
+      const r = await handleProcess({ ...baseReq, text: ukText }, store);
+      expect(r.ok).toBe(true);
+      const call = callWithFallbackMock.mock.calls[0]!;
+      expect(call[1].system).toMatch(/Ukrainian/);
+    });
+  });
 });

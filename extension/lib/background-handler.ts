@@ -6,6 +6,7 @@ import { buildTranslatePrompt, buildSummarizePrompt, TEMPERATURES } from './prom
 import { callWithFallback } from './llm-fallback';
 import { callProxy } from './providers/proxy';
 import { incrementLocalQuota } from './quota';
+import { detectLanguage, pickSmartTarget } from './lang-detect';
 
 const MAX_LEN = 10_000;
 
@@ -25,7 +26,9 @@ export async function handleProcess(
   }
 
   const settings = await getSettings();
-  const targetLang = req.targetLang || settings.targetLang;
+  const targetLang = req.smartDirection
+    ? pickSmartTarget(detectLanguage(req.text), settings)
+    : (req.targetLang || settings.targetLang);
   const cacheKey = await getCacheKey({ mode: req.mode, text: req.text, targetLang });
   const cached = await getEntry(cacheKey, store);
   if (cached) {
