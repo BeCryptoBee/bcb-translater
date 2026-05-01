@@ -180,7 +180,7 @@ export default defineContentScript({
       const y = Math.max(0, Math.min(anchor.y + window.scrollY, maxY));
       const next = mountShadow(
         <FloatingButton
-          onTranslate={() => showPopup(text, rect, 'translate')}
+          onTranslate={() => showPopup(text, rect, 'translate', { smartDirection: true })}
           onSummary={() => showPopup(text, rect, 'summarize')}
           color={accentColor}
         />,
@@ -226,6 +226,7 @@ export default defineContentScript({
       text: string,
       anchor: DOMRect | { x: number; y: number },
       defaultMode?: Mode,
+      opts?: { smartDirection?: boolean },
     ) => {
       closeMount();
       const pos =
@@ -234,6 +235,7 @@ export default defineContentScript({
         <ActionPopup
           text={text}
           defaultMode={defaultMode}
+          smartDirection={opts?.smartDirection}
           onClose={() => closeMount()}
         />,
         pos,

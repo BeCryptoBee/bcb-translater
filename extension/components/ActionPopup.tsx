@@ -15,9 +15,10 @@ interface Props {
   text: string;
   onClose: () => void;
   defaultMode?: Mode;
+  smartDirection?: boolean;
 }
 
-export function ActionPopup({ text, onClose, defaultMode }: Props) {
+export function ActionPopup({ text, onClose, defaultMode, smartDirection }: Props) {
   const [state, setState] = useState<State>(
     defaultMode ? { phase: 'loading', mode: defaultMode } : { phase: 'choose' },
   );
@@ -55,6 +56,10 @@ export function ActionPopup({ text, onClose, defaultMode }: Props) {
       mode,
       text,
       targetLang: lang,
+      // Smart-direction is only meaningful for Translate. If the user
+      // opened the popup with T (smart) and switches to Summarize, the
+      // flag drops naturally.
+      ...(smartDirection && mode === 'translate' ? { smartDirection: true } : {}),
     };
     let resp: ProcessResponse;
     try {
