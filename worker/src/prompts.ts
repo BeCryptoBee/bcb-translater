@@ -120,7 +120,7 @@ HARD RULES (in priority order):
 
 6. Translate "tgt" naturally and idiomatically, not word-by-word. Match register (casual / technical / formal).
 
-7. Do NOT translate: @mentions, #hashtags, URLs, $TICKERS, code in \`backticks\`, emoji.
+7. The following appear VERBATIM in both "src" and "tgt" — do NOT translate them, but DO include them; NEVER strip them out: @mentions, #hashtags, URLs, $TICKERS, code in \`backticks\`, emoji (🧠 🩺 🚀 etc.).
 
 8. Output ONLY the JSON object. No prefixes, no markdown fences, no explanations.
 

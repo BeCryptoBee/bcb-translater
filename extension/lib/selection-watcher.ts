@@ -24,16 +24,24 @@ export function getSelectionText(sel: Selection): string {
   try {
     const ownerDoc = range.startContainer.ownerDocument ?? document;
     const div = ownerDoc.createElement('div');
-    // Off-screen but laid out so CSS applies; pre-wrap keeps any existing
-    // whitespace from being collapsed in the visual representation.
     div.style.cssText =
       'position:absolute;left:-99999px;top:-99999px;white-space:pre-wrap;';
     div.appendChild(range.cloneContents());
+
+    // Twemoji & friends: X.com (and many sites) render emoji as
+    // <img alt="🧠" src="twemoji.svg">. innerText/textContent ignore the
+    // alt attribute, so emoji evaporate from the captured text. Replace
+    // every emoji-image with a Text node carrying its alt BEFORE reading
+    // innerText so the original glyphs survive into the LLM prompt.
+    const imgs = div.querySelectorAll('img[alt]');
+    imgs.forEach((img) => {
+      const alt = (img as HTMLImageElement).alt;
+      if (alt) img.replaceWith(ownerDoc.createTextNode(alt));
+    });
+
     ownerDoc.body.appendChild(div);
     const text = div.innerText;
     ownerDoc.body.removeChild(div);
-    // If innerText ended up shorter than toString() (very rare — usually
-    // the opposite), prefer toString to avoid losing characters.
     return text.length >= fallback.length ? text : fallback;
   } catch {
     return fallback;
