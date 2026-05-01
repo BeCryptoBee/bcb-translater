@@ -33,26 +33,39 @@ export default defineBackground(() => {
 
   // (Re-)create context menus on install / update / browser start. Removing
   // first avoids the "Cannot create item with duplicate id" error when the
-  // service worker restarts after a manual refresh.
+  // service worker restarts after a manual refresh. Each create() also
+  // passes a callback that swallows chrome.runtime.lastError, because
+  // onInstalled and onStartup can fire close together (or interleave with
+  // a SW wakeup) and we don't want a benign "duplicate id" warning
+  // bleeding into runtime.lastError for unrelated callers.
+  const swallowLastError = (): void => {
+    void chrome.runtime.lastError;
+  };
   const buildMenus = (): void => {
     chrome.contextMenus.removeAll(() => {
-      chrome.contextMenus.create({
-        id: 'bcb-root',
-        title: 'BCB Translate',
-        contexts: ['selection'],
-      });
-      chrome.contextMenus.create({
-        id: 'bcb-translate',
-        parentId: 'bcb-root',
-        title: 'Translate selection',
-        contexts: ['selection'],
-      });
-      chrome.contextMenus.create({
-        id: 'bcb-summarize',
-        parentId: 'bcb-root',
-        title: 'Summary selection',
-        contexts: ['selection'],
-      });
+      void chrome.runtime.lastError;
+      chrome.contextMenus.create(
+        { id: 'bcb-root', title: 'BCB Translate', contexts: ['selection'] },
+        swallowLastError,
+      );
+      chrome.contextMenus.create(
+        {
+          id: 'bcb-translate',
+          parentId: 'bcb-root',
+          title: 'Translate selection',
+          contexts: ['selection'],
+        },
+        swallowLastError,
+      );
+      chrome.contextMenus.create(
+        {
+          id: 'bcb-summarize',
+          parentId: 'bcb-root',
+          title: 'Summary selection',
+          contexts: ['selection'],
+        },
+        swallowLastError,
+      );
     });
   };
   chrome.runtime.onInstalled.addListener(buildMenus);
