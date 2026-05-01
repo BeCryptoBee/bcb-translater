@@ -23,3 +23,16 @@ export function detectLanguage(text: string): string {
   if (code3 === 'und') return 'und';
   return ISO6393_TO_ISO6391[code3] ?? 'und';
 }
+
+/**
+ * Smart-direction target resolver. Used by the floating-bar T button.
+ * Rule: Ukrainian source -> English; anything else (or unknown) -> the
+ * user's configured targetLang.
+ */
+export function pickSmartTarget(
+  detected: string,
+  settings: { targetLang: string },
+): string {
+  if (detected === 'uk') return 'en';
+  return settings.targetLang;
+}
