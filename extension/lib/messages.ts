@@ -6,6 +6,7 @@ export interface ProcessRequest {
   text: string;
   sourceLang?: string;
   targetLang: string;
+  smartDirection?: boolean;
 }
 
 export type ErrorCode =
@@ -29,12 +30,16 @@ export type ProcessResponse =
 export function isProcessRequest(x: unknown): x is ProcessRequest {
   if (typeof x !== 'object' || x === null) return false;
   const o = x as Record<string, unknown>;
-  return (
-    o.type === 'process' &&
-    (o.mode === 'translate' || o.mode === 'summarize') &&
-    typeof o.text === 'string' &&
-    typeof o.targetLang === 'string'
-  );
+  if (
+    o.type !== 'process' ||
+    (o.mode !== 'translate' && o.mode !== 'summarize') ||
+    typeof o.text !== 'string' ||
+    typeof o.targetLang !== 'string'
+  ) {
+    return false;
+  }
+  if (o.smartDirection !== undefined && typeof o.smartDirection !== 'boolean') return false;
+  return true;
 }
 
 export function isProcessResponse(x: unknown): x is ProcessResponse {

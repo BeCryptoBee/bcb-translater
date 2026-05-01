@@ -24,4 +24,39 @@ describe('messages', () => {
   it('accepts error response', () => {
     expect(isProcessResponse({ ok: false, code: 'quota_exhausted', message: '...' })).toBe(true);
   });
+
+  it('accepts request with smartDirection: true', () => {
+    expect(
+      isProcessRequest({
+        type: 'process',
+        mode: 'translate',
+        text: 'hi',
+        targetLang: 'uk',
+        smartDirection: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('accepts request without smartDirection (backwards compat)', () => {
+    expect(
+      isProcessRequest({
+        type: 'process',
+        mode: 'translate',
+        text: 'hi',
+        targetLang: 'uk',
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects non-boolean smartDirection', () => {
+    expect(
+      isProcessRequest({
+        type: 'process',
+        mode: 'translate',
+        text: 'hi',
+        targetLang: 'uk',
+        smartDirection: 'yes',
+      }),
+    ).toBe(false);
+  });
 });
