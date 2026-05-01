@@ -78,20 +78,15 @@ async function runScan(onClick: OnClick): Promise<void> {
     if (t.hasAttribute(FLAG)) continue;
     t.setAttribute(FLAG, '1');
 
-    // Twitter renders verified badges, inline media and tightly-styled
-    // @mentions as inline-block elements. innerText then inserts spurious
-    // newlines around them — e.g. "AAVE on @Solana, more volume…" becomes
-    // "AAVE on\n@Solana\n, more volume…". Collapse isolated single \n to
-    // a space — BUT only when the next character is regular prose. If the
-    // next character is a bullet/list/quote marker ("-", "*", "•", ">",
-    // "→"), it is a real list-item separator written by the author, NOT
-    // a Twitter rendering artifact, and we must keep it so the model
-    // segments each item into its own translation unit. Same for \n\n
-    // (paragraph breaks) — left intact.
-    const raw = t.innerText.trim();
-    const text = raw
-      .replace(/(?<!\n)\n(?![\n>\-*•→])/g, ' ')
-      .replace(/[ \t]+/g, ' ');
+    // Send the raw innerText with line breaks intact. Earlier versions
+    // collapsed isolated single "\n" to a space because Twitter's
+    // verified-badge / mention rendering used to insert spurious newlines
+    // — but downstream we now pre-split the text on "\n" and send each
+    // line as its own translation unit, so preserving real list/quote
+    // boundaries is FAR more important than smoothing out the occasional
+    // artifact line. The model still translates each line cleanly even
+    // if it contains a stray prefix/suffix from rendering.
+    const text = t.innerText.trim();
     if (text.length < 5) continue;
 
     const lang = detectLanguage(text);

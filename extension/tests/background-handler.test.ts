@@ -276,7 +276,7 @@ describe('handleProcess', () => {
       text: 'Hello. World.',
     };
 
-    it('successful JSON returns segments and derived flat result', async () => {
+    it('successful batch returns segments and derived flat result', async () => {
       stubChrome({
         syncData: {
           userApiKey: 'k',
@@ -287,21 +287,20 @@ describe('handleProcess', () => {
       });
       const store = createMemoryStore();
       callWithFallbackMock.mockResolvedValueOnce({
-        text: JSON.stringify({
-          segments: [
-            { src: 'Hello.', tgt: 'Привіт.' },
-            { src: 'World.', tgt: 'Світ.' },
-          ],
-        }),
+        text: JSON.stringify({ translations: ['Привіт.', 'Світ.'] }),
         provider: 'gemini',
       });
 
-      const r = await handleProcess(baseSeg, store);
+      // Use multi-line input so pre-split produces 2 lines.
+      const r = await handleProcess(
+        { ...baseSeg, text: 'Hello.\nWorld.' },
+        store,
+      );
       expect(r.ok).toBe(true);
       if (r.ok) {
         expect(r.segments).toHaveLength(2);
-        expect(r.separators).toEqual(['', ' ']);
-        expect(r.result).toBe('Привіт. Світ.');
+        expect(r.separators).toEqual(['', '\n']);
+        expect(r.result).toBe('Привіт.\nСвіт.');
       }
       expect(callWithFallbackMock).toHaveBeenCalledTimes(1);
       const call = callWithFallbackMock.mock.calls[0]!;
@@ -320,20 +319,23 @@ describe('handleProcess', () => {
       const store = createMemoryStore();
       callWithFallbackMock
         .mockResolvedValueOnce({ text: 'not json', provider: 'gemini' })
-        .mockResolvedValueOnce({ text: 'Привіт. Світ.', provider: 'gemini' });
+        .mockResolvedValueOnce({ text: 'Привіт.\nСвіт.', provider: 'gemini' });
 
-      const r = await handleProcess(baseSeg, store);
+      const r = await handleProcess(
+        { ...baseSeg, text: 'Hello.\nWorld.' },
+        store,
+      );
       expect(r.ok).toBe(true);
       if (r.ok) {
         expect(r.segments).toBeUndefined();
-        expect(r.result).toBe('Привіт. Світ.');
+        expect(r.result).toBe('Привіт.\nСвіт.');
       }
       expect(callWithFallbackMock).toHaveBeenCalledTimes(2);
       expect(callWithFallbackMock.mock.calls[0]![1].jsonMode).toBeDefined();
       expect(callWithFallbackMock.mock.calls[1]![1].jsonMode).toBeUndefined();
     });
 
-    it('skips structure-preservation safeguard when segmented succeeds', async () => {
+    it('multi-paragraph input — separators preserve \\n\\n exactly', async () => {
       stubChrome({
         syncData: {
           userApiKey: 'k',
@@ -344,13 +346,7 @@ describe('handleProcess', () => {
       });
       const store = createMemoryStore();
       callWithFallbackMock.mockResolvedValueOnce({
-        text: JSON.stringify({
-          segments: [
-            { src: 'A.', tgt: 'А.' },
-            { src: 'B.', tgt: 'Б.' },
-            { src: 'C.', tgt: 'В.' },
-          ],
-        }),
+        text: JSON.stringify({ translations: ['А.', 'Б.', 'В.'] }),
         provider: 'gemini',
       });
 
@@ -360,7 +356,36 @@ describe('handleProcess', () => {
         expect(r.result).toBe('А.\n\nБ.\n\nВ.');
         expect(r.segments).toHaveLength(3);
       }
-      expect(callWithFallbackMock).toHaveBeenCalledTimes(1); // no retry
+      expect(callWithFallbackMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('translation count mismatch falls back to flat', async () => {
+      stubChrome({
+        syncData: {
+          userApiKey: 'k',
+          provider: 'gemini',
+          targetLang: 'uk',
+          translationHighlight: true,
+        },
+      });
+      const store = createMemoryStore();
+      callWithFallbackMock
+        .mockResolvedValueOnce({
+          // Returns 1 string but pre-split produced 2 lines → mismatch.
+          text: JSON.stringify({ translations: ['merged'] }),
+          provider: 'gemini',
+        })
+        .mockResolvedValueOnce({ text: 'flat fallback', provider: 'gemini' });
+
+      const r = await handleProcess(
+        { ...baseSeg, text: 'Hello.\nWorld.' },
+        store,
+      );
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.segments).toBeUndefined();
+        expect(r.result).toBe('flat fallback');
+      }
     });
   });
 
@@ -375,14 +400,9 @@ describe('handleProcess', () => {
         },
       });
       const store = createMemoryStore();
-      const text = 'Hello. World.';
+      const text = 'Hello.\nWorld.';
       callWithFallbackMock.mockResolvedValueOnce({
-        text: JSON.stringify({
-          segments: [
-            { src: 'Hello.', tgt: 'Привіт.' },
-            { src: 'World.', tgt: 'Світ.' },
-          ],
-        }),
+        text: JSON.stringify({ translations: ['Привіт.', 'Світ.'] }),
         provider: 'gemini',
       });
 
@@ -401,12 +421,12 @@ describe('handleProcess', () => {
       );
       expect(second).toMatchObject({
         ok: true,
-        result: 'Привіт. Світ.',
+        result: 'Привіт.\nСвіт.',
         cached: true,
       });
       if (second.ok) {
         expect(second.segments).toHaveLength(2);
-        expect(second.separators).toEqual(['', ' ']);
+        expect(second.separators).toEqual(['', '\n']);
       }
       expect(callWithFallbackMock).not.toHaveBeenCalled();
     });

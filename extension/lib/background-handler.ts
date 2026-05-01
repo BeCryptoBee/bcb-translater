@@ -5,10 +5,11 @@ import { getEntry, setEntry, getCacheKey, type StorageAdapter } from './cache';
 import {
   buildTranslatePrompt,
   buildSummarizePrompt,
-  buildTranslateSegmentedPrompt,
+  buildBatchTranslatePrompt,
+  presplitForBatch,
   TEMPERATURES,
   SEGMENTED_TEMPERATURE,
-  SEGMENTED_RESPONSE_SCHEMA,
+  BATCH_RESPONSE_SCHEMA,
 } from './prompts';
 import { callWithFallback } from './llm-fallback';
 import { callProxy } from './providers/proxy';
@@ -86,52 +87,75 @@ export async function handleProcess(
     req.mode === 'translate'
       ? buildTranslatePrompt({ text: req.text, targetLang })
       : buildSummarizePrompt({ text: req.text, targetLang });
-  const segBuilt = segmented
-    ? buildTranslateSegmentedPrompt({ text: req.text, targetLang })
-    : null;
-  // Lower temperature for segmented mode — the model needs to follow the
-  // segment-per-line contract strictly, not be "creative" about structure.
+  // Lower temperature for segmented mode — strict 1-to-1 contract benefits
+  // from deterministic output.
   const temperature = segmented ? SEGMENTED_TEMPERATURE : TEMPERATURES[req.mode];
 
   try {
-    let result: string;
-    let provider: 'gemini' | 'groq';
+    // Initialised on every reachable code path below; the explicit
+    // assignment assertion is to satisfy TS flow analysis through the
+    // nested if-elses in the segmented batch branch.
+    let result!: string;
+    let provider!: 'gemini' | 'groq';
     let remainingQuota: number | undefined;
     let segments: Array<{ src: string; tgt: string }> | undefined;
     let separators: string[] | undefined;
 
     if (settings.userApiKey) {
-      // Own-key path. When segmented, ask provider in JSON mode then parse +
-      // validate locally; on failure, fall back to flat prompt once.
-      if (segBuilt) {
-        const r = await callWithFallback(settings.provider, {
-          system: segBuilt.system,
-          prompt: segBuilt.user,
-          temperature,
-          apiKey: settings.userApiKey,
-          jsonMode: { schema: SEGMENTED_RESPONSE_SCHEMA as object },
-        });
-        let parsed: unknown;
-        try { parsed = JSON.parse(r.text); } catch { parsed = null; }
-        const v = parsed && typeof parsed === 'object'
-          ? validateSegments((parsed as { segments?: unknown }).segments, req.text)
-          : { ok: false as const, reason: 'parse_failed' };
-        if (v.ok) {
-          segments = v.segments;
-          separators = v.separators;
-          result = v.derivedFlat;
-          provider = r.provider;
-        } else {
-          // Single retry with the flat prompt; no JSON mode.
-          const r2 = await callWithFallback(settings.provider, {
+      // Own-key path. When segmented, pre-split client-side, send batch
+      // translate prompt with strict array schema, then build segments
+      // ourselves — no longer relying on the model to obey segmentation
+      // rules. Falls back to flat prompt on any validation failure.
+      if (segmented) {
+        const lines = presplitForBatch(req.text);
+        if (lines.length === 0) {
+          // Pathological — fall through to flat translate.
+          const rFlat = await callWithFallback(settings.provider, {
             system: flatBuilt.system,
             prompt: flatBuilt.user,
-            temperature,
+            temperature: TEMPERATURES[req.mode],
             apiKey: settings.userApiKey,
           });
-          result = r2.text;
-          provider = r2.provider;
-          // segments/separators stay undefined — UI degrades to flat.
+          result = rFlat.text;
+          provider = rFlat.provider;
+        } else {
+          const batch = buildBatchTranslatePrompt({ lines, targetLang });
+          const r = await callWithFallback(settings.provider, {
+            system: batch.system,
+            prompt: batch.user,
+            temperature,
+            apiKey: settings.userApiKey,
+            jsonMode: { schema: BATCH_RESPONSE_SCHEMA as object },
+          });
+          let parsed: unknown;
+          try { parsed = JSON.parse(r.text); } catch { parsed = null; }
+          const tgts =
+            parsed && typeof parsed === 'object' && Array.isArray((parsed as { translations?: unknown }).translations)
+              ? ((parsed as { translations: unknown[] }).translations as unknown[])
+              : null;
+          let ok = false;
+          if (tgts && tgts.length === lines.length && tgts.every((x) => typeof x === 'string')) {
+            const candidateSegments = lines.map((src, i) => ({ src, tgt: tgts[i] as string }));
+            const v = validateSegments(candidateSegments, req.text);
+            if (v.ok) {
+              segments = v.segments;
+              separators = v.separators;
+              result = v.derivedFlat;
+              provider = r.provider;
+              ok = true;
+            }
+          }
+          if (!ok) {
+            // Validation / count / parse failure — fall back to flat once.
+            const r2 = await callWithFallback(settings.provider, {
+              system: flatBuilt.system,
+              prompt: flatBuilt.user,
+              temperature: TEMPERATURES[req.mode],
+              apiKey: settings.userApiKey,
+            });
+            result = r2.text;
+            provider = r2.provider;
+          }
         }
       } else {
         const r = await callWithFallback(settings.provider, {

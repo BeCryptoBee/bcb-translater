@@ -151,12 +151,7 @@ describe('worker fetch handler — segmented translate', () => {
             candidates: [{
               content: {
                 parts: [{
-                  text: JSON.stringify({
-                    segments: [
-                      { src: 'Hi.', tgt: 'Привіт.' },
-                      { src: 'World.', tgt: 'Світ.' },
-                    ],
-                  }),
+                  text: JSON.stringify({ translations: ['Привіт.', 'Світ.'] }),
                 }],
               },
             }],
@@ -168,7 +163,8 @@ describe('worker fetch handler — segmented translate', () => {
     const env = makeEnv();
     const req = postRequest({
       installId: 'i-seg',
-      body: { mode: 'translate', text: 'Hi. World.', targetLang: 'Ukrainian', segmented: true },
+      // Multi-line input: pre-split produces 2 lines.
+      body: { mode: 'translate', text: 'Hi.\nWorld.', targetLang: 'Ukrainian', segmented: true },
     });
     const res = await worker.fetch!(req, env);
     expect(res.status).toBe(200);
@@ -178,8 +174,8 @@ describe('worker fetch handler — segmented translate', () => {
       separators?: string[];
     };
     expect(body.segments).toHaveLength(2);
-    expect(body.separators).toEqual(['', ' ']);
-    expect(body.result).toBe('Привіт. Світ.');
+    expect(body.separators).toEqual(['', '\n']);
+    expect(body.result).toBe('Привіт.\nСвіт.');
   });
 
   it('falls back internally to flat when JSON is broken; counts as one quota call', async () => {
@@ -192,7 +188,7 @@ describe('worker fetch handler — segmented translate', () => {
           calls += 1;
           return jsonResponse({
             candidates: [{
-              content: { parts: [{ text: calls === 1 ? 'not json' : 'Привіт. Світ.' }] },
+              content: { parts: [{ text: calls === 1 ? 'not json' : 'Привіт.\nСвіт.' }] },
             }],
           });
         }
@@ -202,7 +198,7 @@ describe('worker fetch handler — segmented translate', () => {
     const env = makeEnv();
     const req = postRequest({
       installId: 'i-fallback',
-      body: { mode: 'translate', text: 'Hi. World.', targetLang: 'Ukrainian', segmented: true },
+      body: { mode: 'translate', text: 'Hi.\nWorld.', targetLang: 'Ukrainian', segmented: true },
     });
     const res = await worker.fetch!(req, env);
     expect(res.status).toBe(200);
@@ -212,8 +208,7 @@ describe('worker fetch handler — segmented translate', () => {
       remainingQuota: number;
     };
     expect(body.segments).toBeUndefined();
-    expect(body.result).toBe('Привіт. Світ.');
-    // remainingQuota = 49 (one user-facing call), even though we made 2 upstream
+    expect(body.result).toBe('Привіт.\nСвіт.');
     expect(body.remainingQuota).toBe(49);
     expect(calls).toBe(2);
   });

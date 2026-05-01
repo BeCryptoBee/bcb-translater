@@ -3,10 +3,11 @@ import { callWithFallback } from './llm-fallback';
 import {
   buildTranslatePrompt,
   buildSummarizePrompt,
-  buildTranslateSegmentedPrompt,
+  buildBatchTranslatePrompt,
+  presplitForBatch,
   TEMPERATURES,
   SEGMENTED_TEMPERATURE,
-  SEGMENTED_RESPONSE_SCHEMA,
+  BATCH_RESPONSE_SCHEMA,
 } from './prompts';
 import { validateSegments } from './segments-validate';
 
@@ -59,41 +60,45 @@ export default {
     if (!q.allowed) return json(429, { error: 'quota_exhausted' });
 
     const segmented = b.segmented === true && b.mode === 'translate';
-    const built = segmented
-      ? buildTranslateSegmentedPrompt({ text: b.text, targetLang: b.targetLang })
-      : b.mode === 'translate'
-        ? buildTranslatePrompt({ text: b.text, targetLang: b.targetLang })
-        : buildSummarizePrompt({ text: b.text, targetLang: b.targetLang });
 
     try {
-      const r = await callWithFallback(
-        'auto',
-        {
-          system: built.system,
-          prompt: built.user,
-          temperature: segmented ? SEGMENTED_TEMPERATURE : TEMPERATURES[b.mode],
-          ...(segmented ? { jsonMode: { schema: SEGMENTED_RESPONSE_SCHEMA as object } } : {}),
-        },
-        { gemini: env.GEMINI_API_KEY, groq: env.GROQ_API_KEY },
-      );
-
       if (segmented) {
-        let parsed: unknown;
-        try { parsed = JSON.parse(r.text); } catch { parsed = null; }
-        const v = parsed && typeof parsed === 'object'
-          ? validateSegments((parsed as { segments?: unknown }).segments, b.text)
-          : { ok: false as const, reason: 'parse_failed' };
-        if (v.ok) {
-          return json(200, {
-            result: v.derivedFlat,
-            segments: v.segments,
-            separators: v.separators,
-            provider: r.provider,
-            remainingQuota: q.remaining,
-          });
+        const lines = presplitForBatch(b.text);
+        if (lines.length > 0) {
+          const batch = buildBatchTranslatePrompt({ lines, targetLang: b.targetLang });
+          const r = await callWithFallback(
+            'auto',
+            {
+              system: batch.system,
+              prompt: batch.user,
+              temperature: SEGMENTED_TEMPERATURE,
+              jsonMode: { schema: BATCH_RESPONSE_SCHEMA as object },
+            },
+            { gemini: env.GEMINI_API_KEY, groq: env.GROQ_API_KEY },
+          );
+          let parsed: unknown;
+          try { parsed = JSON.parse(r.text); } catch { parsed = null; }
+          const tgts =
+            parsed && typeof parsed === 'object' && Array.isArray((parsed as { translations?: unknown }).translations)
+              ? ((parsed as { translations: unknown[] }).translations as unknown[])
+              : null;
+          if (tgts && tgts.length === lines.length && tgts.every((x) => typeof x === 'string')) {
+            const candidate = lines.map((src, i) => ({ src, tgt: tgts[i] as string }));
+            const v = validateSegments(candidate, b.text);
+            if (v.ok) {
+              return json(200, {
+                result: v.derivedFlat,
+                segments: v.segments,
+                separators: v.separators,
+                provider: r.provider,
+                remainingQuota: q.remaining,
+              });
+            }
+          }
         }
-        // Internal flat retry. Quota is NOT incremented again — counts as
-        // one user-facing request even though we made two upstream calls.
+        // Pre-split / batch failed somewhere — internal flat retry. Quota
+        // counts once at the user-facing boundary even though we made
+        // multiple upstream calls.
         const flat = buildTranslatePrompt({ text: b.text, targetLang: b.targetLang });
         const r2 = await callWithFallback(
           'auto',
@@ -107,6 +112,20 @@ export default {
         });
       }
 
+      // Non-segmented (flat) path — translate or summarize.
+      const built =
+        b.mode === 'translate'
+          ? buildTranslatePrompt({ text: b.text, targetLang: b.targetLang })
+          : buildSummarizePrompt({ text: b.text, targetLang: b.targetLang });
+      const r = await callWithFallback(
+        'auto',
+        {
+          system: built.system,
+          prompt: built.user,
+          temperature: TEMPERATURES[b.mode],
+        },
+        { gemini: env.GEMINI_API_KEY, groq: env.GROQ_API_KEY },
+      );
       return json(200, { result: r.text, provider: r.provider, remainingQuota: q.remaining });
     } catch {
       return json(502, { error: 'provider_error' });
