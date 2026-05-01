@@ -270,6 +270,133 @@ describe('handleProcess', () => {
     expect(callWithFallbackMock).toHaveBeenCalledTimes(1);
   });
 
+  describe('segmented (own-key path, translationHighlight=true)', () => {
+    const baseSeg = {
+      ...baseReq,
+      text: 'Hello. World.',
+    };
+
+    it('successful JSON returns segments and derived flat result', async () => {
+      stubChrome({
+        syncData: {
+          userApiKey: 'k',
+          provider: 'gemini',
+          targetLang: 'uk',
+          translationHighlight: true,
+        },
+      });
+      const store = createMemoryStore();
+      callWithFallbackMock.mockResolvedValueOnce({
+        text: JSON.stringify({
+          segments: [
+            { src: 'Hello.', tgt: 'Привіт.' },
+            { src: 'World.', tgt: 'Світ.' },
+          ],
+        }),
+        provider: 'gemini',
+      });
+
+      const r = await handleProcess(baseSeg, store);
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.segments).toHaveLength(2);
+        expect(r.separators).toEqual(['', ' ']);
+        expect(r.result).toBe('Привіт. Світ.');
+      }
+      expect(callWithFallbackMock).toHaveBeenCalledTimes(1);
+      const call = callWithFallbackMock.mock.calls[0]!;
+      expect(call[1].jsonMode).toBeDefined();
+    });
+
+    it('broken JSON triggers single retry with flat prompt and returns segments=undefined', async () => {
+      stubChrome({
+        syncData: {
+          userApiKey: 'k',
+          provider: 'gemini',
+          targetLang: 'uk',
+          translationHighlight: true,
+        },
+      });
+      const store = createMemoryStore();
+      callWithFallbackMock
+        .mockResolvedValueOnce({ text: 'not json', provider: 'gemini' })
+        .mockResolvedValueOnce({ text: 'Привіт. Світ.', provider: 'gemini' });
+
+      const r = await handleProcess(baseSeg, store);
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.segments).toBeUndefined();
+        expect(r.result).toBe('Привіт. Світ.');
+      }
+      expect(callWithFallbackMock).toHaveBeenCalledTimes(2);
+      expect(callWithFallbackMock.mock.calls[0]![1].jsonMode).toBeDefined();
+      expect(callWithFallbackMock.mock.calls[1]![1].jsonMode).toBeUndefined();
+    });
+
+    it('skips structure-preservation safeguard when segmented succeeds', async () => {
+      stubChrome({
+        syncData: {
+          userApiKey: 'k',
+          provider: 'gemini',
+          targetLang: 'uk',
+          translationHighlight: true,
+        },
+      });
+      const store = createMemoryStore();
+      callWithFallbackMock.mockResolvedValueOnce({
+        text: JSON.stringify({
+          segments: [
+            { src: 'A.', tgt: 'А.' },
+            { src: 'B.', tgt: 'Б.' },
+            { src: 'C.', tgt: 'В.' },
+          ],
+        }),
+        provider: 'gemini',
+      });
+
+      const r = await handleProcess({ ...baseReq, text: 'A.\n\nB.\n\nC.' }, store);
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.result).toBe('А.\n\nБ.\n\nВ.');
+        expect(r.segments).toHaveLength(3);
+      }
+      expect(callWithFallbackMock).toHaveBeenCalledTimes(1); // no retry
+    });
+  });
+
+  describe('segmented (proxy path)', () => {
+    it('passes segmented=true to proxy and surfaces segments/separators', async () => {
+      stubChrome({
+        syncData: {
+          userApiKey: '',
+          provider: 'auto',
+          targetLang: 'uk',
+          translationHighlight: true,
+        },
+      });
+      const store = createMemoryStore();
+      callProxyMock.mockResolvedValueOnce({
+        text: 'А. Б.',
+        segments: [
+          { src: 'A.', tgt: 'А.' },
+          { src: 'B.', tgt: 'Б.' },
+        ],
+        separators: ['', ' '],
+        provider: 'gemini',
+        remainingQuota: 100,
+      });
+
+      const r = await handleProcess({ ...baseReq, text: 'A. B.' }, store);
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.segments).toHaveLength(2);
+        expect(r.separators).toEqual(['', ' ']);
+        expect(r.result).toBe('А. Б.');
+      }
+      expect(callProxyMock.mock.calls[0]![0].segmented).toBe(true);
+    });
+  });
+
   describe('smartDirection', () => {
     // Use long enough text so franc-min returns a confident detection.
     const ukText =
