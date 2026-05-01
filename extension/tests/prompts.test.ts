@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildTranslatePrompt, buildSummarizePrompt, normalizeLang } from '~/lib/prompts';
+import {
+  buildTranslatePrompt,
+  buildSummarizePrompt,
+  buildTranslateSegmentedPrompt,
+  normalizeLang,
+  SEGMENTED_RESPONSE_SCHEMA,
+} from '~/lib/prompts';
 
 describe('prompts', () => {
   it('translate system prompt embeds target language', () => {
@@ -37,5 +43,23 @@ describe('prompts', () => {
     const p = buildTranslatePrompt({ text: 'hi', targetLang: 'uk' });
     expect(p.system).toContain('Ukrainian');
     expect(p.system).not.toContain('to uk');
+  });
+
+  describe('buildTranslateSegmentedPrompt', () => {
+    it('returns system + user with target language name', () => {
+      const r = buildTranslateSegmentedPrompt({ text: 'hello', targetLang: 'uk' });
+      expect(r.system).toMatch(/Ukrainian/);
+      expect(r.user).toBe('hello');
+    });
+    it('system prompt instructs JSON segments shape', () => {
+      const r = buildTranslateSegmentedPrompt({ text: 'x', targetLang: 'en' });
+      expect(r.system).toMatch(/segments/i);
+      expect(r.system).toMatch(/"src"/);
+      expect(r.system).toMatch(/"tgt"/);
+    });
+    it('SEGMENTED_RESPONSE_SCHEMA is shape-correct (Gemini-compatible)', () => {
+      expect(SEGMENTED_RESPONSE_SCHEMA.type).toBe('object');
+      expect((SEGMENTED_RESPONSE_SCHEMA as { properties?: unknown }).properties).toBeDefined();
+    });
   });
 });
