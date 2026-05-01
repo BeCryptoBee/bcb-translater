@@ -35,6 +35,15 @@ export default defineContentScript({
     // never the result popup (the user may want to keep reading the result
     // even after they cleared the selection).
     let mountKind: 'floating' | 'popup' | null = null;
+    // Where the popup was opened from. Drives Translation Highlight dispatch:
+    //   - 'selection' → highlight saved Range via CSS Custom Highlight API
+    //   - 'tweet'     → wrap tweetTextEl spans on first hover, toggle class
+    //   - 'command'   → no source-side highlight (no anchor)
+    let popupOrigin: 'selection' | 'tweet' | 'command' | null = null;
+    // Race guard: hover events that arrive after closeMount must no-op.
+    let popupAborted = false;
+    let savedSelectionRange: Range | null = null;
+    let popupTweetEl: HTMLElement | null = null;
     let pointerDownHandler: ((e: PointerEvent) => void) | null = null;
     let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
     let pendingShow: number | null = null;
@@ -105,10 +114,16 @@ export default defineContentScript({
 
     const closeMount = () => {
       cancelPendingShow();
+      // Mark aborted BEFORE unmounting so any in-flight hover dispatches
+      // bail out instead of touching torn-down state.
+      popupAborted = true;
       if (!mount) return;
       mount.unmount();
       mount = null;
       mountKind = null;
+      popupOrigin = null;
+      savedSelectionRange = null;
+      popupTweetEl = null;
       detachDismiss();
     };
 
@@ -180,8 +195,13 @@ export default defineContentScript({
       const y = Math.max(0, Math.min(anchor.y + window.scrollY, maxY));
       const next = mountShadow(
         <FloatingButton
-          onTranslate={() => showPopup(text, rect, 'translate', { smartDirection: true })}
-          onSummary={() => showPopup(text, rect, 'summarize')}
+          onTranslate={() =>
+            showPopup(text, rect, 'translate', {
+              smartDirection: true,
+              origin: 'selection',
+            })
+          }
+          onSummary={() => showPopup(text, rect, 'summarize', { origin: 'selection' })}
           color={accentColor}
         />,
         { x, y },
@@ -226,9 +246,25 @@ export default defineContentScript({
       text: string,
       anchor: DOMRect | { x: number; y: number },
       defaultMode?: Mode,
-      opts?: { smartDirection?: boolean },
+      opts?: {
+        smartDirection?: boolean;
+        origin?: 'selection' | 'tweet' | 'command';
+        tweetEl?: HTMLElement;
+      },
     ) => {
       closeMount();
+      // Capture range BEFORE mounting; mounting steals focus and may
+      // collapse the live selection.
+      popupAborted = false;
+      popupOrigin = opts?.origin ?? null;
+      if (popupOrigin === 'selection') {
+        const live = document.getSelection();
+        if (live && live.rangeCount > 0 && !live.isCollapsed) {
+          savedSelectionRange = live.getRangeAt(0).cloneRange();
+        }
+      } else if (popupOrigin === 'tweet') {
+        popupTweetEl = opts?.tweetEl ?? null;
+      }
       const pos =
         anchor instanceof DOMRect ? computePopupPosition(anchor) : anchor;
       const next: ShadowMount = mountShadow(
@@ -286,7 +322,7 @@ export default defineContentScript({
       // viewport. Some sites clear the selection on right-click (so the rect
       // is gone), and even when it's there it can be off-screen if the user
       // scrolled — both cases used to drop the popup somewhere invisible.
-      showPopup(text, viewportCenterPosition(), m.mode);
+      showPopup(text, viewportCenterPosition(), m.mode, { origin: 'command' });
     };
     chrome.runtime.onMessage.addListener(onMessageHandler);
     cleanups.push(() => {
@@ -312,7 +348,7 @@ export default defineContentScript({
         const aRect = (article ?? tweetTextEl).getBoundingClientRect();
         const tRect = tweetTextEl.getBoundingClientRect();
         const rect = new DOMRect(aRect.left, tRect.top, aRect.width, aRect.height);
-        showPopup(text, rect, mode);
+        showPopup(text, rect, mode, { origin: 'tweet', tweetEl: tweetTextEl });
       });
       cleanups.push(unwatchTweets);
     }
