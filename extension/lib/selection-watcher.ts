@@ -3,6 +3,43 @@ export interface SelectionInfo {
   rect: DOMRect;
 }
 
+/**
+ * Extract the visible text of a Selection with line breaks between
+ * block-level elements preserved.
+ *
+ * Why not `Selection.toString()`: the native method concatenates text-node
+ * data and does NOT insert "\n" between inline-block elements. X.com (and
+ * many sites) renders each line of a multi-line list as its own
+ * `display:block`/`display:inline-block` span, so `toString()` returns one
+ * collapsed string. Downstream segmentation then has nothing to split on.
+ *
+ * `innerText` IS CSS-aware — it emits "\n" between block boundaries — but
+ * it only works on a Node, not a Range. We clone the range's contents into
+ * an offscreen div, then read its `innerText`.
+ */
+export function getSelectionText(sel: Selection): string {
+  if (sel.rangeCount === 0 || sel.isCollapsed) return '';
+  const range = sel.getRangeAt(0);
+  const fallback = sel.toString();
+  try {
+    const ownerDoc = range.startContainer.ownerDocument ?? document;
+    const div = ownerDoc.createElement('div');
+    // Off-screen but laid out so CSS applies; pre-wrap keeps any existing
+    // whitespace from being collapsed in the visual representation.
+    div.style.cssText =
+      'position:absolute;left:-99999px;top:-99999px;white-space:pre-wrap;';
+    div.appendChild(range.cloneContents());
+    ownerDoc.body.appendChild(div);
+    const text = div.innerText;
+    ownerDoc.body.removeChild(div);
+    // If innerText ended up shorter than toString() (very rare — usually
+    // the opposite), prefer toString to avoid losing characters.
+    return text.length >= fallback.length ? text : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function watchSelection(
   callback: (selection: SelectionInfo | null) => void,
 ): () => void {
@@ -12,7 +49,7 @@ export function watchSelection(
       callback(null);
       return;
     }
-    const text = sel.toString();
+    const text = getSelectionText(sel);
     if (text.trim().length < 3) {
       callback(null);
       return;

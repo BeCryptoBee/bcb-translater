@@ -1,7 +1,7 @@
 import { ActionPopup } from '~/components/ActionPopup';
 import { FloatingButton } from '~/components/FloatingButton';
 import { mountShadow, type ShadowMount } from '~/lib/shadow-host';
-import { watchSelection } from '~/lib/selection-watcher';
+import { watchSelection, getSelectionText } from '~/lib/selection-watcher';
 import { startTweetInjector } from '~/lib/twitter/injector';
 import { getSettings, onSettingsChange } from '~/lib/storage';
 import type { Mode } from '~/lib/messages';
@@ -87,7 +87,7 @@ export default defineContentScript({
         pendingShow = null;
         const live = document.getSelection();
         if (!live || live.rangeCount === 0 || live.isCollapsed) return;
-        const text = live.toString();
+        const text = getSelectionText(live);
         if (text.trim().length < 3) return;
         const rect = live.getRangeAt(0).getBoundingClientRect();
         showButton(text, rect);
@@ -392,7 +392,7 @@ export default defineContentScript({
       if (m.mode !== 'translate' && m.mode !== 'summarize') return;
 
       const sel = document.getSelection();
-      const text = m.text ?? sel?.toString() ?? '';
+      const text = m.text ?? (sel ? getSelectionText(sel) : '');
       if (!text) return;
 
       // For context menu / hotkey invocations, ignore the selection rect

@@ -83,6 +83,10 @@ HARD RULES:
 
 export const TEMPERATURES = { translate: 0.3, summarize: 0.5 } as const;
 
+/** Lower temperature for segmented translate — the model needs to follow the
+ *  segment-per-line contract strictly, not be "creative" about structure. */
+export const SEGMENTED_TEMPERATURE = 0;
+
 /**
  * JSON Schema for the segmented translate response. Used by:
  * - Gemini (via responseSchema + responseMimeType: 'application/json')

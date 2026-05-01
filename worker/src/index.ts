@@ -5,6 +5,7 @@ import {
   buildSummarizePrompt,
   buildTranslateSegmentedPrompt,
   TEMPERATURES,
+  SEGMENTED_TEMPERATURE,
   SEGMENTED_RESPONSE_SCHEMA,
 } from './prompts';
 import { validateSegments } from './segments-validate';
@@ -70,7 +71,7 @@ export default {
         {
           system: built.system,
           prompt: built.user,
-          temperature: TEMPERATURES[b.mode],
+          temperature: segmented ? SEGMENTED_TEMPERATURE : TEMPERATURES[b.mode],
           ...(segmented ? { jsonMode: { schema: SEGMENTED_RESPONSE_SCHEMA as object } } : {}),
         },
         { gemini: env.GEMINI_API_KEY, groq: env.GROQ_API_KEY },

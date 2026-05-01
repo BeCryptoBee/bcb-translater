@@ -7,6 +7,7 @@ import {
   buildSummarizePrompt,
   buildTranslateSegmentedPrompt,
   TEMPERATURES,
+  SEGMENTED_TEMPERATURE,
   SEGMENTED_RESPONSE_SCHEMA,
 } from './prompts';
 import { callWithFallback } from './llm-fallback';
@@ -88,7 +89,9 @@ export async function handleProcess(
   const segBuilt = segmented
     ? buildTranslateSegmentedPrompt({ text: req.text, targetLang })
     : null;
-  const temperature = TEMPERATURES[req.mode];
+  // Lower temperature for segmented mode — the model needs to follow the
+  // segment-per-line contract strictly, not be "creative" about structure.
+  const temperature = segmented ? SEGMENTED_TEMPERATURE : TEMPERATURES[req.mode];
 
   try {
     let result: string;
