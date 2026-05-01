@@ -36,6 +36,15 @@ export function mountShadow(component: ReactNode, position: { x: number; y: numb
   host.addEventListener('click', blockOutward);
   host.addEventListener('touchstart', blockOutward);
 
+  // ALSO preventDefault on mousedown so clicking our bar does not blur the
+  // active contenteditable / textarea on the host page. Without this, X.com
+  // reply compose loses focus → selectionchange clears the saved selection
+  // → our watchSelection callback closes the floating bar BEFORE the click
+  // event has a chance to fire, so React onClick never sees the click.
+  // (This is the standard recipe for floating UI that needs to be clickable
+  // without stealing focus from a text input.)
+  host.addEventListener('mousedown', (e) => e.preventDefault());
+
   // Best-effort theme application: resolve "auto" against the system's
   // prefers-color-scheme. Failures (e.g. chrome.storage not ready) keep light.
   void getSettings()

@@ -49,19 +49,24 @@ export function buildProjection(
   };
 
   if (root instanceof Range) {
-    // Walk only Text nodes that intersect the Range. Use the Range's owner
-    // document so we don't get confused if `document` is shadowed.
     const ownerDoc = root.startContainer.ownerDocument ?? document;
-    const walker = ownerDoc.createTreeWalker(
-      root.commonAncestorContainer,
-      NodeFilter.SHOW_TEXT,
-      {
-        acceptNode: (n: Node) =>
-          root.intersectsNode(n) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
-      },
-    );
-    let n: Node | null;
-    while ((n = walker.nextNode())) visit(n);
+    const cac = root.commonAncestorContainer;
+    // Special case: range entirely inside one Text node — TreeWalker only
+    // visits descendants, not the root node itself, so visit it directly.
+    if (cac.nodeType === Node.TEXT_NODE) {
+      visit(cac);
+    } else {
+      // Visit ALL text nodes inside the common ancestor. We deliberately do
+      // NOT filter by Range.intersectsNode here — that filter has been
+      // observed to reject everything in real Chrome on X.com, leaving
+      // projection.text === ''. Including text outside the live selection
+      // is harmless: locateInProjection will still find the segment src as
+      // a substring, and the resulting Range we build is bounded to the
+      // matched cover (so the highlight paints only the right region).
+      const walker = ownerDoc.createTreeWalker(cac, NodeFilter.SHOW_TEXT);
+      let n: Node | null;
+      while ((n = walker.nextNode())) visit(n);
+    }
   } else {
     for (const child of Array.from(root.childNodes)) visit(child);
   }
