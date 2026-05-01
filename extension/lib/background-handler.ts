@@ -49,8 +49,35 @@ export async function handleProcess(
   });
   const cached = await getEntry(cacheKey, store);
   if (cached) {
-    // Cache stores only the flat string. On a hit we lose segments; the
-    // popup degrades to plain rendering. Acceptable per spec.
+    // Cache values can be either a JSON envelope written by this version
+    // (carries segments + separators for Translation Highlight) or a
+    // legacy plain string from older builds. Try JSON first; fall back
+    // to plain on any parse / shape failure.
+    try {
+      const parsed = JSON.parse(cached) as {
+        result?: unknown;
+        segments?: unknown;
+        separators?: unknown;
+      };
+      if (parsed && typeof parsed.result === 'string') {
+        const cachedSegments =
+          Array.isArray(parsed.segments)
+            ? (parsed.segments as Array<{ src: string; tgt: string }>)
+            : undefined;
+        const cachedSeparators =
+          Array.isArray(parsed.separators) ? (parsed.separators as string[]) : undefined;
+        return {
+          ok: true,
+          result: parsed.result,
+          provider: 'gemini',
+          cached: true,
+          segments: cachedSegments,
+          separators: cachedSeparators,
+        };
+      }
+    } catch {
+      // legacy plain-string entry — handled below
+    }
     return { ok: true, result: cached, provider: 'gemini', cached: true };
   }
 
@@ -173,7 +200,11 @@ export async function handleProcess(
       }
     }
 
-    await setEntry(cacheKey, result, store);
+    // Cache as a JSON envelope so segments + separators survive a hit and
+    // Translation Highlight keeps working on repeated translations of the
+    // same text. Reader handles both this format and legacy plain strings.
+    const cachedPayload = JSON.stringify({ result, segments, separators });
+    await setEntry(cacheKey, cachedPayload, store);
     return { ok: true, result, provider, remainingQuota, segments, separators };
   } catch (e: unknown) {
     const kind = (e as { kind?: string })?.kind;

@@ -364,6 +364,73 @@ describe('handleProcess', () => {
     });
   });
 
+  describe('segmented cache round-trip', () => {
+    it('cache hit on segmented re-translate returns segments + separators', async () => {
+      stubChrome({
+        syncData: {
+          userApiKey: 'k',
+          provider: 'gemini',
+          targetLang: 'uk',
+          translationHighlight: true,
+        },
+      });
+      const store = createMemoryStore();
+      const text = 'Hello. World.';
+      callWithFallbackMock.mockResolvedValueOnce({
+        text: JSON.stringify({
+          segments: [
+            { src: 'Hello.', tgt: 'Привіт.' },
+            { src: 'World.', tgt: 'Світ.' },
+          ],
+        }),
+        provider: 'gemini',
+      });
+
+      // First call: writes JSON envelope to cache.
+      const first = await handleProcess(
+        { type: 'process', mode: 'translate', text, targetLang: 'uk' },
+        store,
+      );
+      expect(first.ok).toBe(true);
+      callWithFallbackMock.mockClear();
+
+      // Second call: cache hit must restore segments + separators.
+      const second = await handleProcess(
+        { type: 'process', mode: 'translate', text, targetLang: 'uk' },
+        store,
+      );
+      expect(second).toMatchObject({
+        ok: true,
+        result: 'Привіт. Світ.',
+        cached: true,
+      });
+      if (second.ok) {
+        expect(second.segments).toHaveLength(2);
+        expect(second.separators).toEqual(['', ' ']);
+      }
+      expect(callWithFallbackMock).not.toHaveBeenCalled();
+    });
+
+    it('legacy plain-string cache entry still works (returns flat without segments)', async () => {
+      stubChrome({ syncData: { userApiKey: 'k', provider: 'gemini', targetLang: 'uk' } });
+      const store = createMemoryStore();
+      // Pre-seed cache with a legacy plain-string entry.
+      const cacheKey = await (
+        await import('~/lib/cache')
+      ).getCacheKey({ mode: 'translate', text: 'hi', targetLang: 'uk' });
+      await store.set({
+        [cacheKey]: { value: 'привіт', ts: Date.now(), bytes: 10 },
+      });
+
+      const r = await handleProcess(
+        { type: 'process', mode: 'translate', text: 'hi', targetLang: 'uk' },
+        store,
+      );
+      expect(r).toMatchObject({ ok: true, result: 'привіт', cached: true });
+      if (r.ok) expect(r.segments).toBeUndefined();
+    });
+  });
+
   describe('segmented (proxy path)', () => {
     it('passes segmented=true to proxy and surfaces segments/separators', async () => {
       stubChrome({
