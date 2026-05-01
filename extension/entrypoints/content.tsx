@@ -290,6 +290,12 @@ export default defineContentScript({
         const live = document.getSelection();
         if (live && live.rangeCount > 0 && !live.isCollapsed) {
           savedSelectionRange = live.getRangeAt(0).cloneRange();
+          // Drop the visible browser selection so the native blue highlight
+          // doesn't sit on top of (and obscure) our yellow CSS Custom
+          // Highlight when the user hovers translated sentences. The Range
+          // is preserved in `savedSelectionRange` for the highlighter; the
+          // user can re-select the same text later if they need to.
+          live.removeAllRanges();
         }
       } else if (popupOrigin === 'tweet') {
         popupTweetEl = opts?.tweetEl ?? null;
