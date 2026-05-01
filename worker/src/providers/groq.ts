@@ -19,6 +19,7 @@ export const groq: Provider = {
           model: 'llama-3.3-70b-versatile',
           messages,
           temperature: input.temperature,
+          ...(input.jsonMode ? { response_format: { type: 'json_object' } } : {}),
         }),
       });
     } catch {

@@ -90,4 +90,21 @@ describe('gemini provider', () => {
       kind: 'network',
     });
   });
+
+  it('jsonMode flips responseMimeType and includes responseSchema', async () => {
+    let capturedBody = '';
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      capturedBody = init.body as string;
+      return jsonResponse({
+        candidates: [{ content: { parts: [{ text: '{"segments":[]}' }] } }],
+      });
+    }) as unknown as typeof fetch;
+    await gemini.call(
+      { ...baseInput, jsonMode: { schema: { type: 'object' } } },
+      fetchImpl,
+    );
+    const body = JSON.parse(capturedBody);
+    expect(body.generationConfig.responseMimeType).toBe('application/json');
+    expect(body.generationConfig.responseSchema).toEqual({ type: 'object' });
+  });
 });

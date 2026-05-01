@@ -5,6 +5,9 @@ export interface ProviderInput {
   prompt: string;
   temperature: number;
   apiKey: string;
+  /** When set, the provider must produce JSON conforming to this schema.
+   *  Gemini uses responseSchema natively; Groq uses json_object mode. */
+  jsonMode?: { schema: object };
 }
 
 export interface ProviderResult {

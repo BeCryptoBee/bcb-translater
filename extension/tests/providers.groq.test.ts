@@ -91,4 +91,18 @@ describe('groq provider', () => {
       kind: 'network',
     });
   });
+
+  it('jsonMode sends response_format json_object', async () => {
+    let capturedBody = '';
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      capturedBody = init.body as string;
+      return jsonResponse({ choices: [{ message: { content: '{"segments":[]}' } }] });
+    }) as unknown as typeof fetch;
+    await groq.call(
+      { ...baseInput, jsonMode: { schema: { type: 'object' } } },
+      fetchImpl,
+    );
+    const body = JSON.parse(capturedBody);
+    expect(body.response_format).toEqual({ type: 'json_object' });
+  });
 });

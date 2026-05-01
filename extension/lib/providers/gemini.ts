@@ -12,8 +12,9 @@ export const gemini: Provider = {
         contents: [{ role: 'user', parts: [{ text: input.prompt }] }],
         generationConfig: {
           temperature: input.temperature,
-          responseMimeType: 'text/plain',
+          responseMimeType: input.jsonMode ? 'application/json' : 'text/plain',
           thinkingConfig: { thinkingBudget: 0 },
+          ...(input.jsonMode ? { responseSchema: input.jsonMode.schema } : {}),
         },
       };
       if (input.system) {
