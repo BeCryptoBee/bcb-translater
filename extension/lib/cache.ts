@@ -18,8 +18,12 @@ export async function getCacheKey(input: {
   mode: string;
   text: string;
   targetLang: string;
+  segmented?: boolean;
 }): Promise<string> {
-  const data = new TextEncoder().encode(`${input.mode}|${input.targetLang}|${input.text}`);
+  const seg = input.segmented ? '1' : '0';
+  const data = new TextEncoder().encode(
+    `${input.mode}|${input.targetLang}|seg=${seg}|${input.text}`,
+  );
   const buf = await crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, '0'))

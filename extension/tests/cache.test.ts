@@ -49,6 +49,33 @@ describe('cache', () => {
       const d = await getCacheKey({ mode: 'translate', text: 'hello', targetLang: 'en' });
       expect(new Set([a, b, c, d]).size).toBe(4);
     });
+
+    it('different segmented flag produces different keys', async () => {
+      const a = await getCacheKey({
+        mode: 'translate',
+        text: 'hi',
+        targetLang: 'uk',
+        segmented: false,
+      });
+      const b = await getCacheKey({
+        mode: 'translate',
+        text: 'hi',
+        targetLang: 'uk',
+        segmented: true,
+      });
+      expect(a).not.toBe(b);
+    });
+
+    it('omitted segmented defaults to false (stable hash)', async () => {
+      const a = await getCacheKey({ mode: 'translate', text: 'hi', targetLang: 'uk' });
+      const b = await getCacheKey({
+        mode: 'translate',
+        text: 'hi',
+        targetLang: 'uk',
+        segmented: false,
+      });
+      expect(a).toBe(b);
+    });
   });
 
   describe('setEntry / getEntry', () => {
