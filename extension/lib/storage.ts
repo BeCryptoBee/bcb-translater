@@ -6,6 +6,7 @@ export interface Settings {
   theme: 'light' | 'dark' | 'auto';
   enableHotkeys: boolean; // false by default — Alt+T / Alt+S off until user opts in
   tweetButtonColor: string; // CSS color for the inline button text on tweets
+  translationHighlight: boolean; // sentence-aligned hover highlight; ~10–15% more tokens
 }
 
 const DEFAULTS: Settings = {
@@ -16,6 +17,7 @@ const DEFAULTS: Settings = {
   theme: 'auto',
   enableHotkeys: false,
   tweetButtonColor: '#9ca3af',
+  translationHighlight: false,
 };
 
 export async function getSettings(): Promise<Settings> {

@@ -129,6 +129,21 @@ export function App() {
           <span className="text-sm">Enable hotkeys (Alt+T translate, Alt+S summary)</span>
         </label>
 
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={settings.translationHighlight}
+            onChange={(e) => update({ translationHighlight: e.target.checked })}
+          />
+          <span className="text-sm">
+            <div>Translation Highlight</div>
+            <div className="text-xs opacity-70">
+              Hover translated sentences to highlight the original. Uses ~10–15% more API tokens.
+            </div>
+          </span>
+        </label>
+
         <label className="block">
           <span className="text-sm">Accent color (tweet & selection buttons)</span>
           <div className="flex gap-2 mt-1">
