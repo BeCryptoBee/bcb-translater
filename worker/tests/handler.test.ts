@@ -140,6 +140,85 @@ describe('worker fetch handler — input validation', () => {
   });
 });
 
+describe('worker fetch handler — segmented translate', () => {
+  it('returns segments+separators when upstream JSON is valid', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL | Request) => {
+        const u = String(url);
+        if (u.includes('generativelanguage.googleapis.com')) {
+          return jsonResponse({
+            candidates: [{
+              content: {
+                parts: [{
+                  text: JSON.stringify({
+                    segments: [
+                      { src: 'Hi.', tgt: 'Привіт.' },
+                      { src: 'World.', tgt: 'Світ.' },
+                    ],
+                  }),
+                }],
+              },
+            }],
+          });
+        }
+        return new Response('', { status: 500 });
+      }),
+    );
+    const env = makeEnv();
+    const req = postRequest({
+      installId: 'i-seg',
+      body: { mode: 'translate', text: 'Hi. World.', targetLang: 'Ukrainian', segmented: true },
+    });
+    const res = await worker.fetch!(req, env);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      result: string;
+      segments?: Array<{ src: string; tgt: string }>;
+      separators?: string[];
+    };
+    expect(body.segments).toHaveLength(2);
+    expect(body.separators).toEqual(['', ' ']);
+    expect(body.result).toBe('Привіт. Світ.');
+  });
+
+  it('falls back internally to flat when JSON is broken; counts as one quota call', async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL | Request) => {
+        const u = String(url);
+        if (u.includes('generativelanguage.googleapis.com')) {
+          calls += 1;
+          return jsonResponse({
+            candidates: [{
+              content: { parts: [{ text: calls === 1 ? 'not json' : 'Привіт. Світ.' }] },
+            }],
+          });
+        }
+        return new Response('', { status: 500 });
+      }),
+    );
+    const env = makeEnv();
+    const req = postRequest({
+      installId: 'i-fallback',
+      body: { mode: 'translate', text: 'Hi. World.', targetLang: 'Ukrainian', segmented: true },
+    });
+    const res = await worker.fetch!(req, env);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      result: string;
+      segments?: unknown;
+      remainingQuota: number;
+    };
+    expect(body.segments).toBeUndefined();
+    expect(body.result).toBe('Привіт. Світ.');
+    // remainingQuota = 49 (one user-facing call), even though we made 2 upstream
+    expect(body.remainingQuota).toBe(49);
+    expect(calls).toBe(2);
+  });
+});
+
 describe('worker fetch handler — happy path', () => {
   it('translates successfully via gemini and returns 200 with quota decremented', async () => {
     vi.stubGlobal(
